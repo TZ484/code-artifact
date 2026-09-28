@@ -1,0 +1,1410 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>石硤尾美荷樓研學導賞與反思平台</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        meiho: {
+                            red: '#B83227',
+                            darkred: '#8B1E15',
+                            orange: '#D96B27',
+                            cream: '#FDFBF7',
+                            sand: '#F4EBE1',
+                            green: '#2A5A44',
+                            slate: '#2C3E50'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', '"Helvetica Neue"', 'Arial', '"Noto Sans HK"', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- React & Babel CDN -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- 高德地圖 JS API 2.0 -->
+    <script>
+        window._AMapSecurityConfig = {
+            securityJsCode: '84f5cf1f4eeaf866efd8588c00c4f230'
+        };
+    </script>
+    <script src="https://webapi.amap.com/maps?v=2.0&key=84f5cf1f4eeaf866efd8588c00c4f230"></script>
+    <style>
+        body {
+            background-color: #FDFBF7;
+            color: #2C3E50;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #F4EBE1;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #D96B27;
+            border-radius: 3px;
+        }
+        @media print {
+            header, nav, .no-print {
+                display: none !important;
+            }
+            body {
+                background-color: white !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        
+        // 核心資料：石硤尾美荷樓 7 大研學景點（含真實地理座標與歷史內容）
+        const MEI_HO_SPOTS = [
+            {
+                id: 'spot-1',
+                title: '美荷樓外觀與 H 型徙置大廈建築',
+                category: '建築特色',
+                floor: '室外外圍 / 巴域街入口',
+                lat: 22.33395,
+                lng: 114.16371,
+                mapX: 50,
+                mapY: 15,
+                badge: '二級歷史建築',
+                shortDesc: '香港最早期的六層高「H型」徙置大廈，標誌著香港公共房屋政策的開端。',
+                image: 'https://images.unsplash.com/photo-1570129477492-45c003edd2be?auto=format&fit=crop&w=800&q=80',
+                fallbackImg: 'https://placehold.co/800x500/B83227/ffffff?text=美荷樓H型大廈外觀',
+                history: `1953年12月25日聖誕夜，石硤尾木屋區發生浩劫性大火，導致超過5萬名居民流離失所。港英政府為迅速安置災民，於1954年興建首批共8座六層高的「徙置大廈」，美荷樓（當時稱為第15座）便是其中之一。`,
+                architecturalDetail: `「H型」建築的設計極具實用考量：兩條長型翼樓為住戶單位，兩翼中間由一條橫樑連接。這條中間橫樑集中設置了所有住戶共用的洗手間、浴室及公共水龍頭，有效節省建造時間與管道成本。外廊式的走廊除了連接各單位，更是居民日常生活社交的重要空間。`,
+                questions: [
+                    '觀察美荷樓外觀，試找出「H型」建築的兩個長翼與中間橫樑，並思考這種設計在1950年代有何優點？',
+                    '美荷樓外牆翻新後保留了經典的陽台與綠色鋼窗，這與你現在居住的樓宇有什麼不同？'
+                ]
+            },
+            {
+                id: 'spot-2',
+                title: '1950年代徙置區原始居住單位',
+                category: '居住變遷',
+                floor: 'G/F 生活館展區',
+                lat: 22.33380,
+                lng: 114.16355,
+                mapX: 28,
+                mapY: 40,
+                badge: '歷史復原',
+                shortDesc: '重現50年代約120平方呎的極度簡陋單位，一家幾口擠迫共居。',
+                image: 'https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=800&q=80',
+                fallbackImg: 'https://placehold.co/800x500/8B1E15/ffffff?text=1950年代公屋單位復原',
+                history: `1950年代初期的徙置單位極為狹小，標準面積僅為120平方呎（約11平方米），當局規定每個成年人需要約24平方呎空間，因此一個單位往往要擠下大大小小五至六名甚至更多家庭成員。`,
+                architecturalDetail: `單位內沒有獨立廚房及洗手間，牆壁為未經修飾的粗糙水泥，沒有鋪設地磚。家俱極少，多為雙層木床、帆布床、煤油燈、圓木凳及簡單衣箱。晚上睡覺時，小孩甚至要睡在床底或桌下。`,
+                questions: [
+                    '想像一下在120平方呎空間內住上全家五六口人，日常生活會遇到哪些不便？',
+                    '50年代單位內沒有獨立水龍頭，居民每天要如何解決用水和做飯問題？'
+                ]
+            },
+            {
+                id: 'spot-3',
+                title: '共用走廊與火水爐炊煙',
+                category: '街坊生活',
+                floor: 'G/F 走廊展區',
+                lat: 22.33390,
+                lng: 114.16365,
+                mapX: 50,
+                mapY: 52,
+                badge: '生活細節',
+                shortDesc: '走廊既是廚房也是兒童遊戲場，展現鄰里互助與「守望相助」的精神。',
+                image: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=800&q=80',
+                fallbackImg: 'https://placehold.co/800x500/D96B27/ffffff?text=走廊共用廚房與火水爐',
+                history: `由於單位室內狹窄，居民紛紛將火水爐（油爐）、砧板及廚具擺放在單位外的公共走廊做飯。每逢傍晚飯頓，走廊炊煙裊裊，香味四溢，街坊之間一邊煮食一邊閒話家常。`,
+                architecturalDetail: `走廊寬闊，成為了當時「兒童遊樂場」。孩子們在走廊跳飛機、打拍子、做作業；媽媽們互相幫忙看顧小孩、借用鹽油醬醋。這種開放式的空間結構，孕育了香港經典的「獅子山下」守望相助鄰里情誼。`,
+                questions: [
+                    '在公共走廊煮食可能會帶來哪些安全或衛生隱患？當時居民是如何應對的？',
+                    '拍攝一張走廊展區或擺放舊式火水爐的照片，寫下你對「守望相助」的理解。'
+                ]
+            },
+            {
+                id: 'spot-4',
+                title: '中間橫樑共用洗手間與水龍頭',
+                category: '衞生歷史',
+                floor: 'G/F 中間橫樑',
+                lat: 22.33400,
+                lng: 114.16370,
+                mapX: 50,
+                mapY: 70,
+                badge: '重點導賞',
+                shortDesc: '整層幾十戶共用數間無門廁所與水龍頭，記錄當年制水歲月。',
+                image: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=800&q=80',
+                fallbackImg: 'https://placehold.co/800x500/2A5A44/ffffff?text=共用浴廁設施復原',
+                history: `在50至60年代，美荷樓每層的中間橫樑設有男女公共廁所和浴室。早期廁所甚至沒有安裝門板，僅有低矮隔板，衛生條件十分惡劣。`,
+                architecturalDetail: `供水制度極其嚴格，特別是在1963年香港大旱「制水」期間，每四天供水一次，每次僅四小時。街坊必須在公共水龍頭前用紅紅白白的大水桶排隊輪候接水，場面蔚為壯觀。`,
+                questions: [
+                    '當得知「制水」時幾十戶人排隊取水的歷史，你對現在隨手開水龍頭的使用習慣有何反思？',
+                    '從共用廁所到現代獨立洗手間，反映了香港社會進步中的哪些改變？'
+                ]
+            },
+            {
+                id: 'spot-5',
+                title: '1970年代改建連通單位',
+                category: '居住變遷',
+                floor: '1/F 展館',
+                lat: 22.33410,
+                lng: 114.16380,
+                mapX: 72,
+                mapY: 40,
+                badge: '演變對比',
+                shortDesc: '兩房打通合併，配備獨立廚廁、彩色電視機與家庭手工業。',
+                image: 'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=800&q=80',
+                fallbackImg: 'https://placehold.co/800x500/2C3E50/ffffff?text=1970年代改建單位復原',
+                history: `到了1970年代，政府推行「十年建屋計劃」，美荷樓亦進行了大規模改建（改建計劃）。將兩個相連的50年代小單位打通合併為一個較大單位，並加裝獨立廁所和廚房露台。`,
+                architecturalDetail: `單位內鋪設了流行地磚（如綠白相間花磚），家庭電器如黑白/彩色電視機、鐵扇、縫紉機（裁縫機）開始普及。當時許多家庭在室內做「穿膠花」、「剪線頭」等家庭手工業，補貼家計，展現勤勞拚搏精神。`,
+                questions: [
+                    '對比50年代與70年代單位，生活品質有了哪些飛躍性的提升？',
+                    '觀察70年代單位內的客廳，找出一件代表當時香港家庭工業發展的物件（如縫紉機或膠花材料）。'
+                ]
+            },
+            {
+                id: 'spot-6',
+                title: '昔日公屋傳統「士多」雜貨店',
+                category: '社區經濟',
+                floor: '1/F 社區展示區',
+                lat: 22.33415,
+                lng: 114.16390,
+                mapX: 82,
+                mapY: 65,
+                badge: '懷舊特色',
+                shortDesc: '售賣玻璃瓶汽水、綠豆冰、賒帳小帳簿，昔日公屋社區的社交中心。',
+                image: 'https://images.unsplash.com/photo-1528698827591-e19ccd7bc23d?auto=format&fit=crop&w=800&q=80',
+                fallbackImg: 'https://placehold.co/800x500/D96B27/ffffff?text=美荷樓懷舊士多展區',
+                history: `在未有大型連鎖超級市場的年代，「士多」（Grocery Store）是公屋居民的生命線。士多老闆熟悉每家每戶，甚至提供「賒帳」（記帳）服務，待居民發薪日再結清。`,
+                architecturalDetail: `士多門口擺放大玻璃瓶裝汽水箱（如維他奶、可口可樂）、紅白藍膠袋、玻璃唧唧糖罐、山楂餅和西瓜波（塑膠足球）。士多不僅是買東西的地方，也是居民留留言、借電話、傳遞消息的資訊中心。`,
+                questions: [
+                    '現代超級市場與昔日「士多」相比，在人情味和社區連結上有所不同嗎？',
+                    '拍照記錄士多展區中最吸引你的一樣懷舊物品，並說明它的用途。'
+                ]
+            },
+            {
+                id: 'spot-7',
+                title: '活化項目：YHA 美荷樓青年旅舍與四美咖啡館',
+                category: '歷史活化',
+                floor: '地面中庭 / 旅舍',
+                lat: 22.33370,
+                lng: 114.16385,
+                mapX: 50,
+                mapY: 88,
+                badge: '現代保育',
+                shortDesc: '獲保育為二級歷史建築，轉型為國際青年旅舍，結合歷史展覽與現代休閒。',
+                image: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80',
+                fallbackImg: 'https://placehold.co/800x500/2A5A44/ffffff?text=美荷樓青年旅舍中庭',
+                history: `美荷樓是石硤尾邨第一期唯一留存下來的徙置大廈。2008年被納入發展局「活化歷史建築夥伴計劃」第一期，由香港青年旅舍協會（YHA）成功活化。`,
+                architecturalDetail: `2013年正式揭幕，轉型為「YHA美荷樓青年旅舍」及「美荷樓生活館」。保育項目完整保留了H型大廈的外貌結構、原裝鋼窗與經典綠色大門，並引入四美咖啡館及文化創意空間，讓舊建築在新時代煥發新生。`,
+                questions: [
+                    '將舊大廈直接拆卸重建與「活化保育」相比，各自有何利弊？',
+                    '作為中小學生，你認為如何能讓更多同齡人關心香港的歷史建築保育？'
+                ]
+            }
+        ];
+
+        function App() {
+            const [activeTab, setActiveTab] = React.useState('map'); // 'map', 'workbook', 'history', 'gallery'
+            const [selectedSpot, setSelectedSpot] = React.useState(MEI_HO_SPOTS[0]);
+            const [isModalOpen, setIsModalOpen] = React.useState(false);
+            
+            // 學生個人資料（初始無預設，由學生自行填寫）
+            const [studentProfile, setStudentProfile] = React.useState({
+                name: '',
+                className: '',
+                studentNo: '',
+                school: ''
+            });
+
+            // 學生打卡紀錄狀態
+            const [studentLogs, setStudentLogs] = React.useState({});
+
+            // 教師評級與評語紀錄
+            const [teacherFeedback, setTeacherFeedback] = React.useState({
+                grade: '未評分',
+                comment: '',
+                featured: false
+            });
+
+            const [toastMessage, setToastMessage] = React.useState('');
+
+            // 顯示提示訊息
+            const showToast = (msg) => {
+                setToastMessage(msg);
+                setTimeout(() => setToastMessage(''), 3000);
+            };
+
+            // 打開景點詳情
+            const handleOpenSpot = (spot) => {
+                setSelectedSpot(spot);
+                setIsModalOpen(true);
+            };
+
+            // 保存學生照片與反思
+            const handleSaveReflection = (spotId, photoData, reflectionText) => {
+                const updated = {
+                    ...studentLogs,
+                    [spotId]: {
+                        photo: photoData || (studentLogs[spotId] ? studentLogs[spotId].photo : ''),
+                        reflection: reflectionText,
+                        timestamp: new Date().toLocaleString('zh-HK', { hour12: false }).slice(0, 16),
+                        completed: true
+                    }
+                };
+                setStudentLogs(updated);
+                showToast('✅ 已成功儲存打卡照片與研學反思！');
+            };
+
+            // 計算完成度
+            const completedCount = Object.keys(studentLogs).filter(k => studentLogs[k]?.completed).length;
+            const totalSpots = MEI_HO_SPOTS.length;
+            const progressPercent = Math.round((completedCount / totalSpots) * 100);
+
+            return (
+                <div className="min-h-screen flex flex-col font-sans bg-meiho-cream text-meiho-slate">
+                    {/* 頂部導航欄 Header */}
+                    <header className="bg-meiho-red text-white shadow-md sticky top-0 z-40">
+                        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                                <div className="w-10 h-10 rounded-full bg-white text-meiho-red flex items-center justify-center font-bold text-xl shadow">
+                                    <i className="fa-solid fa-building-columns"></i>
+                                </div>
+                                <div>
+                                    <h1 className="text-xl font-bold tracking-wide">石硤尾美荷樓研學平台</h1>
+                                    <p className="text-xs text-red-100 hidden sm:block">香港中小學現場導賞、真實地圖打卡與研學反思</p>
+                                </div>
+                            </div>
+
+                            {/* 學生個人資料狀態條 */}
+                            <div className="flex items-center space-x-3 mt-2 sm:mt-0">
+                                <div className="bg-meiho-darkred px-3 py-1.5 rounded-lg text-xs flex items-center space-x-2 border border-red-400/30">
+                                    {studentProfile.name ? (
+                                        <div>
+                                            <span className="font-semibold text-yellow-300">{studentProfile.school || '學生'}</span> {studentProfile.className} ({studentProfile.studentNo}號) <span className="font-bold">{studentProfile.name}</span>
+                                        </div>
+                                    ) : (
+                                        <span className="text-red-200 italic"><i className="fa-solid fa-user-pen mr-1"></i> 請於手冊填寫學生姓名</span>
+                                    )}
+                                    <div className="h-3 w-px bg-red-400/50 my-auto"></div>
+                                    <div className="flex items-center space-x-1">
+                                        <span>完成:</span>
+                                        <span className="font-bold text-yellow-300">{completedCount}/{totalSpots}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 主分頁導航條 */}
+                        <nav className="bg-meiho-darkred border-t border-red-900/40">
+                            <div className="max-w-7xl mx-auto px-2 flex justify-around sm:justify-start sm:space-x-2 text-sm overflow-x-auto custom-scrollbar">
+                                <button 
+                                    onClick={() => setActiveTab('map')}
+                                    className={`px-4 py-2.5 font-medium flex items-center space-x-2 border-b-2 whitespace-nowrap transition ${activeTab === 'map' ? 'border-yellow-400 text-yellow-300 bg-meiho-red/50' : 'border-transparent text-red-100 hover:text-white'}`}
+                                >
+                                    <i className="fa-solid fa-map-location-dot"></i>
+                                    <span>真實實景地圖</span>
+                                </button>
+                                <button 
+                                    onClick={() => setActiveTab('workbook')}
+                                    className={`px-4 py-2.5 font-medium flex items-center space-x-2 border-b-2 whitespace-nowrap transition ${activeTab === 'workbook' ? 'border-yellow-400 text-yellow-300 bg-meiho-red/50' : 'border-transparent text-red-100 hover:text-white'}`}
+                                >
+                                    <i className="fa-solid fa-camera-retro"></i>
+                                    <span>拍照打卡與反思手冊</span>
+                                    {completedCount > 0 && (
+                                        <span className="bg-yellow-400 text-meiho-darkred text-xs px-1.5 py-0.5 rounded-full font-bold">{completedCount}</span>
+                                    )}
+                                </button>
+                                <button 
+                                    onClick={() => setActiveTab('history')}
+                                    className={`px-4 py-2.5 font-medium flex items-center space-x-2 border-b-2 whitespace-nowrap transition ${activeTab === 'history' ? 'border-yellow-400 text-yellow-300 bg-meiho-red/50' : 'border-transparent text-red-100 hover:text-white'}`}
+                                >
+                                    <i className="fa-solid fa-book-open"></i>
+                                    <span>美荷樓歷史百科</span>
+                                </button>
+                                <button 
+                                    onClick={() => setActiveTab('gallery')}
+                                    className={`px-4 py-2.5 font-medium flex items-center space-x-2 border-b-2 whitespace-nowrap transition ${activeTab === 'gallery' ? 'border-yellow-400 text-yellow-300 bg-meiho-red/50' : 'border-transparent text-red-100 hover:text-white'}`}
+                                >
+                                    <i className="fa-solid fa-chalkboard-user"></i>
+                                    <span>分享天地 (教師審閱與學生作品)</span>
+                                </button>
+                            </div>
+                        </nav>
+                    </header>
+
+                    {/* 提示訊息 Toast */}
+                    {toastMessage && (
+                        <div className="fixed bottom-5 right-5 z-50 bg-meiho-slate text-white px-5 py-3 rounded-xl shadow-2xl flex items-center space-x-3 border-l-4 border-yellow-400 animate-bounce">
+                            <i className="fa-solid fa-circle-check text-green-400 text-lg"></i>
+                            <span className="text-sm font-medium">{toastMessage}</span>
+                        </div>
+                    )}
+
+                    {/* 主內容區域 */}
+                    <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
+                        {activeTab === 'map' && (
+                            <MapView 
+                                spots={MEI_HO_SPOTS} 
+                                studentLogs={studentLogs}
+                                onSelectSpot={handleOpenSpot} 
+                                progressPercent={progressPercent}
+                                completedCount={completedCount}
+                                totalSpots={totalSpots}
+                            />
+                        )}
+
+                        {activeTab === 'workbook' && (
+                            <WorkbookView 
+                                spots={MEI_HO_SPOTS} 
+                                studentLogs={studentLogs} 
+                                studentProfile={studentProfile}
+                                setStudentProfile={setStudentProfile}
+                                onSaveReflection={handleSaveReflection}
+                                onOpenSpot={handleOpenSpot}
+                            />
+                        )}
+
+                        {activeTab === 'history' && (
+                            <HistoryView />
+                        )}
+
+                        {activeTab === 'gallery' && (
+                            <GalleryAndTeacherView 
+                                spots={MEI_HO_SPOTS} 
+                                studentLogs={studentLogs}
+                                studentProfile={studentProfile}
+                                teacherFeedback={teacherFeedback}
+                                setTeacherFeedback={setTeacherFeedback}
+                            />
+                        )}
+                    </main>
+
+                    {/* 景點詳細資料與打卡彈窗 Modal */}
+                    {isModalOpen && selectedSpot && (
+                        <SpotDetailModal 
+                            spot={selectedSpot} 
+                            studentLog={studentLogs[selectedSpot.id]}
+                            onClose={() => setIsModalOpen(false)}
+                            onSave={(photo, text) => {
+                                handleSaveReflection(selectedSpot.id, photo, text);
+                                setIsModalOpen(false);
+                            }}
+                        />
+                    )}
+
+                    {/* 頁腳 Footer */}
+                    <footer className="bg-meiho-slate text-slate-300 text-xs py-6 border-t border-slate-700 mt-10">
+                        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center space-y-3 sm:space-y-0">
+                            <div>
+                                <p className="font-semibold text-slate-200">石硤尾美荷樓香港歷史研學計畫</p>
+                                <p className="text-slate-400 mt-0.5">專為香港中小學設計之考察、導賞、真實地圖打卡與反思工具</p>
+                            </div>
+                            <div className="flex space-x-4 text-slate-400">
+                                <span><i className="fa-solid fa-location-dot mr-1"></i> 九龍深水埗石硤尾邨41座美荷樓</span>
+                                <span><i className="fa-solid fa-school mr-1"></i> 香港教育考察專用</span>
+                            </div>
+                        </div>
+                    </footer>
+                </div>
+            );
+        }
+
+        // WGS-84 轉 GCJ-02（高德座標系），避免真實座標在高德地圖上偏移
+        function wgs84ToGcj02(lat, lng) {
+            const a = 6378245.0, ee = 0.00669342162296594323;
+            function transformLat(x, y) {
+                let ret = -100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * Math.sqrt(Math.abs(x));
+                ret += (20.0 * Math.sin(6.0 * x * Math.PI) + 20.0 * Math.sin(2.0 * x * Math.PI)) * 2.0 / 3.0;
+                ret += (20.0 * Math.sin(y * Math.PI) + 40.0 * Math.sin(y / 3.0 * Math.PI)) * 2.0 / 3.0;
+                ret += (160.0 * Math.sin(y / 12.0 * Math.PI) + 320 * Math.sin(y * Math.PI / 30.0)) * 2.0 / 3.0;
+                return ret;
+            }
+            function transformLng(x, y) {
+                let ret = 300.0 + x + 2.0 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * Math.sqrt(Math.abs(x));
+                ret += (20.0 * Math.sin(6.0 * x * Math.PI) + 20.0 * Math.sin(2.0 * x * Math.PI)) * 2.0 / 3.0;
+                ret += (20.0 * Math.sin(x * Math.PI) + 40.0 * Math.sin(x / 3.0 * Math.PI)) * 2.0 / 3.0;
+                ret += (150.0 * Math.sin(x / 12.0 * Math.PI) + 300.0 * Math.sin(x / 30.0 * Math.PI)) * 2.0 / 3.0;
+                return ret;
+            }
+            let dLat = transformLat(lng - 105.0, lat - 35.0);
+            let dLng = transformLng(lng - 105.0, lat - 35.0);
+            const radLat = lat / 180.0 * Math.PI;
+            let magic = Math.sin(radLat);
+            magic = 1 - ee * magic * magic;
+            const sqrtMagic = Math.sqrt(magic);
+            dLat = (dLat * 180.0) / ((a * (1 - ee)) / (magic * sqrtMagic) * Math.PI);
+            dLng = (dLng * 180.0) / (a / sqrtMagic * Math.cos(radLat) * Math.PI);
+            return [lat + dLat, lng + dLng];
+        }
+
+        function MapView({ spots, studentLogs, onSelectSpot, progressPercent, completedCount, totalSpots }) {
+            const [filterCategory, setFilterCategory] = React.useState('ALL');
+            const [mapMode, setMapMode] = React.useState('real'); // 'real'（高德真實地圖）或 'floorplan'（H型平面圖）
+            const mapContainerRef = React.useRef(null);
+            const amapInstance = React.useRef(null);
+            const amapMarkers = React.useRef([]);
+            const amapInfoWindow = React.useRef(null);
+
+            const filteredSpots = filterCategory === 'ALL' 
+                ? spots 
+                : spots.filter(s => s.category === filterCategory);
+
+            // 真實地圖生命週期：掛載時建立一次，組件卸載（切換分頁）時銷毀。
+            // 地圖容器常駐掛載（僅以 CSS hidden 切換顯示），React 不增刪容器，
+            // 徹底避免「切換模式/分頁後重複地圖圖標」與 removeChild 崩潰。
+            React.useEffect(() => {
+                try {
+                    if (!mapContainerRef.current) return undefined;
+
+                    // 中心點：石硤尾美荷樓（WGS-84 轉 GCJ-02 後）
+                    const map = new AMap.Map(mapContainerRef.current, {
+                        center: wgs84ToGcj02(22.33395, 114.16371).reverse(), // AMap 格式：[經度, 緯度]
+                        zoom: 18,
+                        resizeEnable: true,
+                        dragEnable: true,
+                        zoomEnable: true,
+                        doubleClickZoom: true,
+                        touchZoom: true
+                    });
+                    amapInstance.current = map;
+
+                    amapInfoWindow.current = new AMap.InfoWindow({
+                        isCustom: false,
+                        anchor: 'bottom-center',
+                        offset: new AMap.Pixel(0, -16)
+                    });
+
+                    return () => {
+                        try {
+                            if (map.clearMap) map.clearMap();
+                            map.destroy();
+                        } catch (e) {
+                            // 容器已隨組件卸載被移除時，忽略銷毀異常
+                        }
+                        amapInstance.current = null;
+                        amapInfoWindow.current = null;
+                        amapMarkers.current = [];
+                    };
+                } catch (e) {
+                    console.error('地圖初始化失敗', e);
+                    return undefined;
+                }
+            }, []);
+
+            // 景點標記：依 spots 與打卡狀態刷新（每次先清空舊標記，避免重複圖標）
+            React.useEffect(() => {
+                try {
+                const map = amapInstance.current;
+                const infoWindow = amapInfoWindow.current;
+                if (!map || !infoWindow) return;
+
+                if (amapMarkers.current.length) {
+                    map.remove(amapMarkers.current);
+                    amapMarkers.current = [];
+                }
+                infoWindow.close();
+
+                spots.forEach((spot, idx) => {
+                    const isDone = studentLogs[spot.id]?.completed;
+                    const dot = document.createElement('div');
+                    dot.innerHTML = `
+                        <div style="background-color: ${isDone ? '#16a34a' : '#B83227'}; color: white; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 2px solid white; box-shadow: 0 4px 6px rgba(0,0,0,0.3); font-size: 12px; cursor: pointer;">
+                            ${isDone ? '✓' : idx + 1}
+                        </div>
+                    `;
+                    const dotEl = dot.firstElementChild;
+                    const marker = new AMap.Marker({
+                        position: wgs84ToGcj02(spot.lat, spot.lng).reverse(),
+                        content: dotEl,
+                        anchor: 'center',
+                        map: map
+                    });
+
+                    // 以原生 DOM 事件綁定，確保點擊可靠觸發
+                    dotEl.addEventListener('click', () => {
+                        infoWindow.setContent(`
+                            <div style="text-align: center; font-family: sans-serif; padding: 2px; min-width: 180px;">
+                                <b style="font-size: 13px; color: #8B1E15;">#${idx + 1} ${spot.title}</b><br/>
+                                <span style="font-size: 11px; color: #666;">${spot.floor}</span><br/>
+                                <button id="btn-spot-${spot.id}" style="margin-top:6px; background:#D96B27; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:11px; cursor:pointer;">
+                                    查看研學導賞
+                                </button>
+                            </div>
+                        `);
+                        infoWindow.open(map, marker.getPosition());
+                        const btn = document.getElementById(`btn-spot-${spot.id}`);
+                        if (btn) {
+                            btn.onclick = () => onSelectSpot(spot);
+                        }
+                    });
+
+                    amapMarkers.current.push(marker);
+                });
+
+                // 從平面圖切回真實地圖時，通知地圖重新檢查容器尺寸
+                if (mapMode === 'real') {
+                    window.dispatchEvent(new Event('resize'));
+                }
+                } catch (e) {
+                    console.error('地圖標記刷新失敗', e);
+                }
+            }, [mapMode, spots, studentLogs, onSelectSpot]);
+
+            return (
+                <div className="space-y-6 animate-fadeIn">
+                    {/* 研學橫幅與進度 */}
+                    <div className="bg-gradient-to-r from-meiho-red via-meiho-orange to-meiho-darkred rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
+                        <div className="absolute -right-10 -bottom-10 opacity-10 text-9xl">
+                            <i className="fa-solid fa-map-marked-alt"></i>
+                        </div>
+                        <div className="relative z-10 max-w-3xl">
+                            <span className="bg-yellow-400 text-meiho-darkred text-xs px-3 py-1 rounded-full font-bold uppercase tracking-wider mb-2 inline-block">
+                                美荷樓實地考察指南
+                            </span>
+                            <h2 className="text-2xl sm:text-3xl font-bold mb-2">石硤尾美荷樓 — 真實地圖與實地導賞</h2>
+                            <p className="text-sm sm:text-base text-red-100 mb-4 leading-relaxed">
+                                歡迎來到九龍深水埗巴域街美荷樓！請點擊下方<span className="text-yellow-300 font-semibold">真實高德地圖地標</span>或<span className="text-yellow-300 font-semibold">景點卡片</span>，深入了解美荷樓的建築特徵、1953年大火歷史與徙置區生活。
+                            </p>
+                            
+                            {/* 進度條 */}
+                            <div className="bg-black/20 p-3 rounded-xl border border-white/20 max-w-lg">
+                                <div className="flex justify-between text-xs mb-1">
+                                    <span>實地研學打卡進度</span>
+                                    <span className="font-bold text-yellow-300">{completedCount} / {totalSpots} 個景點 ({progressPercent}%)</span>
+                                </div>
+                                <div className="w-full bg-black/30 h-3 rounded-full overflow-hidden p-0.5">
+                                    <div 
+                                        className="bg-yellow-400 h-full rounded-full transition-all duration-500 shadow-inner"
+                                        style={{ width: `${progressPercent}%` }}
+                                    ></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 地圖區域與景點列表中間分欄 */}
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                        {/* 左側：地圖展示 (7 Cols) */}
+                        <div className="lg:col-span-7 bg-white rounded-2xl shadow-md border border-meiho-sand p-4 flex flex-col">
+                            <div className="flex flex-wrap justify-between items-center mb-3 gap-2">
+                                <h3 className="font-bold text-meiho-slate text-base sm:text-lg flex items-center">
+                                    <i className="fa-solid fa-map text-meiho-orange mr-2"></i>
+                                    {mapMode === 'real' ? '美荷樓高德地圖真實實景地圖' : '美荷樓「H型」結構與展區平面示意圖'}
+                                </h3>
+                                
+                                {/* 地圖模式切換 */}
+                                <div className="flex bg-slate-100 p-1 rounded-lg text-xs">
+                                    <button 
+                                        onClick={() => setMapMode('real')}
+                                        className={`px-3 py-1 rounded-md font-semibold transition ${mapMode === 'real' ? 'bg-meiho-red text-white shadow' : 'text-slate-600 hover:text-slate-900'}`}
+                                    >
+                                        <i className="fa-solid fa-earth-asia mr-1"></i>真實地圖
+                                    </button>
+                                    <button 
+                                        onClick={() => setMapMode('floorplan')}
+                                        className={`px-3 py-1 rounded-md font-semibold transition ${mapMode === 'floorplan' ? 'bg-meiho-red text-white shadow' : 'text-slate-600 hover:text-slate-900'}`}
+                                    >
+                                        <i className="fa-solid fa-vector-square mr-1"></i>H型平面圖
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* 地圖容器常駐且 className 靜態（React 不改寫，避免覆蓋 AMap 注入的類別）；
+                                平面圖以 hidden 切換，覆蓋在地圖上方 */}
+                            <div className="relative w-full h-80 sm:h-[420px] rounded-xl border-2 border-meiho-sand overflow-hidden shadow-inner">
+                                <div ref={mapContainerRef} className="w-full h-full"></div>
+                                <div className={`w-full h-full bg-amber-50 p-4 flex items-center justify-center relative ${mapMode === 'floorplan' ? '' : 'hidden'}`}>
+                                        {/* H型建築輪廓繪製 */}
+                                        <div className="absolute inset-4 sm:inset-8 border-4 border-dashed border-meiho-orange/30 rounded-xl pointer-events-none flex items-center justify-center">
+                                            <div className="absolute left-6 top-4 bottom-4 w-1/4 bg-red-800/10 border-2 border-meiho-red/40 rounded-lg flex items-center justify-center">
+                                                <span className="text-xs font-bold text-meiho-red/60">西翼 (展區)</span>
+                                            </div>
+                                            <div className="absolute right-6 top-4 bottom-4 w-1/4 bg-red-800/10 border-2 border-meiho-red/40 rounded-lg flex items-center justify-center">
+                                                <span className="text-xs font-bold text-meiho-red/60">東翼 (旅舍/展區)</span>
+                                            </div>
+                                            <div className="absolute top-1/2 -translate-y-1/2 left-6 right-6 h-1/5 bg-amber-800/10 border-t-2 border-b-2 border-meiho-orange/40 flex items-center justify-center">
+                                                <span className="text-xs font-bold text-meiho-orange/80">中間橫樑 (昔日公用浴室廁所)</span>
+                                            </div>
+                                        </div>
+
+                                        {/* 平面圖標點 */}
+                                        {spots.map((spot, idx) => {
+                                            const isDone = studentLogs[spot.id]?.completed;
+                                            return (
+                                                <button
+                                                    key={spot.id}
+                                                    onClick={() => onSelectSpot(spot)}
+                                                    style={{ left: `${spot.mapX}%`, top: `${spot.mapY}%` }}
+                                                    className="absolute transform -translate-x-1/2 -translate-y-1/2 group z-20 transition-all duration-300"
+                                                >
+                                                    <div className="relative flex items-center justify-center">
+                                                        <span className={`absolute inline-flex h-8 w-8 rounded-full opacity-75 animate-ping ${isDone ? 'bg-green-400' : 'bg-meiho-red'}`}></span>
+                                                        <div className={`relative w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-lg border-2 border-white transition transform group-hover:scale-125 ${isDone ? 'bg-green-600' : 'bg-meiho-red'}`}>
+                                                            {isDone ? '✓' : idx + 1}
+                                                        </div>
+                                                    </div>
+                                                </button>
+                                            );
+                                        })}
+                                </div>
+                            </div>
+
+                            <p className="text-xs text-slate-500 mt-3 text-center italic">
+                                地理定位：九龍深水埗巴域街70號石硤尾邨41座美荷樓 (GPS: 22.33395° N, 114.16371° E)
+                            </p>
+                        </div>
+
+                        {/* 右側：景點列表選單 (5 Cols) */}
+                        <div className="lg:col-span-5 bg-white rounded-2xl shadow-md border border-meiho-sand p-4 flex flex-col h-full">
+                            <div className="flex items-center justify-between mb-3">
+                                <h3 className="font-bold text-meiho-slate text-lg">
+                                    美荷樓 7 大核心研學景點
+                                </h3>
+                                <span className="text-xs bg-meiho-sand text-meiho-darkred font-semibold px-2.5 py-1 rounded-full">
+                                    {spots.length} 個地標
+                                </span>
+                            </div>
+
+                            {/* 分類篩選按鈕 */}
+                            <div className="flex space-x-1.5 mb-3 overflow-x-auto pb-1 custom-scrollbar text-xs">
+                                {['ALL', '建築特色', '居住變遷', '街坊生活', '歷史活化'].map(cat => (
+                                    <button
+                                        key={cat}
+                                        onClick={() => setFilterCategory(cat)}
+                                        className={`px-2.5 py-1 rounded-lg font-medium whitespace-nowrap transition ${filterCategory === cat ? 'bg-meiho-red text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                                    >
+                                        {cat === 'ALL' ? '全部景點' : cat}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* 景點卡片列表 */}
+                            <div className="space-y-3 overflow-y-auto max-h-[460px] pr-1 custom-scrollbar flex-1">
+                                {filteredSpots.map((spot, idx) => {
+                                    const isDone = studentLogs[spot.id]?.completed;
+                                    return (
+                                        <div 
+                                            key={spot.id}
+                                            onClick={() => onSelectSpot(spot)}
+                                            className={`p-3 rounded-xl border transition cursor-pointer flex items-start space-x-3 hover:shadow-md ${isDone ? 'bg-green-50/60 border-green-200' : 'bg-white border-slate-200 hover:border-meiho-orange'}`}
+                                        >
+                                            {/* 景點圖片縮圖 */}
+                                            <div className="relative w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 bg-slate-100">
+                                                <img 
+                                                    src={spot.image} 
+                                                    alt={spot.title}
+                                                    onError={(e) => { e.target.src = spot.fallbackImg; }}
+                                                    className="w-full h-full object-cover"
+                                                />
+                                                <span className="absolute top-1 left-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded font-bold">
+                                                    #{idx + 1}
+                                                </span>
+                                            </div>
+
+                                            {/* 文字內容 */}
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center justify-between mb-1">
+                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800">
+                                                        {spot.floor}
+                                                    </span>
+                                                    {isDone ? (
+                                                        <span className="text-xs font-bold text-green-600 flex items-center">
+                                                            <i className="fa-solid fa-circle-check mr-1"></i> 已打卡
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-xs font-medium text-meiho-orange hover:underline">
+                                                            查看導賞 &rarr;
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <h4 className="font-bold text-sm text-slate-800 truncate mb-1">
+                                                    {spot.title}
+                                                </h4>
+                                                <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
+                                                    {spot.shortDesc}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function WorkbookView({ spots, studentLogs, studentProfile, setStudentProfile, onSaveReflection, onOpenSpot }) {
+            const [selectedSpotId, setSelectedSpotId] = React.useState(spots[0].id);
+            const [inputText, setInputText] = React.useState('');
+            const [imagePreview, setImagePreview] = React.useState('');
+            const fileInputRef = React.useRef(null);
+
+            // 切換景點時載入資料
+            React.useEffect(() => {
+                const existing = studentLogs[selectedSpotId];
+                if (existing) {
+                    setInputText(existing.reflection || '');
+                    setImagePreview(existing.photo || '');
+                } else {
+                    setInputText('');
+                    setImagePreview('');
+                }
+            }, [selectedSpotId, studentLogs]);
+
+            const currentSpot = spots.find(s => s.id === selectedSpotId) || spots[0];
+
+            // 處理照片選擇
+            const handleImageChange = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                        setImagePreview(reader.result);
+                    };
+                    reader.readAsDataURL(file);
+                }
+            };
+
+            // 使用展區現場真實圖片
+            const handleUseSpotPhoto = () => {
+                setImagePreview(currentSpot.image);
+            };
+
+            // 提交個人反思
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (!studentProfile.name.trim()) {
+                    alert('請先在右上角或個人資料欄填寫你的「學生姓名」！');
+                    return;
+                }
+                if (!inputText.trim()) {
+                    alert('請填寫研學心得與思考題答案！');
+                    return;
+                }
+                onSaveReflection(selectedSpotId, imagePreview, inputText);
+            };
+
+            return (
+                <div className="space-y-6 animate-fadeIn">
+                    {/* 頁面標頭與學生個人資料輸入 */}
+                    <div className="bg-white p-5 rounded-2xl shadow-sm border border-meiho-sand flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div>
+                            <span className="text-xs font-bold text-meiho-orange bg-orange-50 px-2.5 py-1 rounded-md border border-orange-200">
+                                研學考察工作紙
+                            </span>
+                            <h2 className="text-2xl font-bold text-meiho-slate mt-1">學生拍照打卡與反思手冊</h2>
+                            <p className="text-xs text-slate-500 mt-0.5">請在美荷樓現場各景點拍攝照片，並認真回答思考問題，填寫你的考察心得。</p>
+                        </div>
+
+                        {/* 學生基礎資料表格 */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs bg-meiho-cream p-3 rounded-xl border border-meiho-sand">
+                            <div>
+                                <label className="text-slate-400 block text-[10px]">學校名稱</label>
+                                <input 
+                                    type="text" 
+                                    placeholder="例：石硤尾官立中學"
+                                    value={studentProfile.school} 
+                                    onChange={(e) => setStudentProfile({...studentProfile, school: e.target.value})}
+                                    className="font-semibold bg-transparent border-b border-slate-300 focus:outline-none focus:border-meiho-red w-full text-slate-800"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-slate-400 block text-[10px]">班別</label>
+                                <input 
+                                    type="text" 
+                                    placeholder="例：中三 A 班"
+                                    value={studentProfile.className} 
+                                    onChange={(e) => setStudentProfile({...studentProfile, className: e.target.value})}
+                                    className="font-semibold bg-transparent border-b border-slate-300 focus:outline-none focus:border-meiho-red w-full text-slate-800"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-slate-400 block text-[10px]">學號</label>
+                                <input 
+                                    type="text" 
+                                    placeholder="例：15"
+                                    value={studentProfile.studentNo} 
+                                    onChange={(e) => setStudentProfile({...studentProfile, studentNo: e.target.value})}
+                                    className="font-semibold bg-transparent border-b border-slate-300 focus:outline-none focus:border-meiho-red w-full text-slate-800"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-slate-400 block text-[10px]">學生姓名 *</label>
+                                <input 
+                                    type="text" 
+                                    placeholder="請輸入你的名字"
+                                    value={studentProfile.name} 
+                                    onChange={(e) => setStudentProfile({...studentProfile, name: e.target.value})}
+                                    className="font-bold bg-transparent border-b border-slate-300 focus:outline-none focus:border-meiho-red w-full text-meiho-red"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 主要內容：左側選景點，右側拍照寫反思 */}
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                        {/* 左側：景點選擇選單 (4 Cols) */}
+                        <div className="lg:col-span-4 space-y-2">
+                            <h3 className="font-bold text-sm text-slate-600 px-1 mb-2">選擇要記錄的研學地標：</h3>
+                            {spots.map((spot, idx) => {
+                                const isDone = studentLogs[spot.id]?.completed;
+                                const isSelected = spot.id === selectedSpotId;
+                                return (
+                                    <button
+                                        key={spot.id}
+                                        onClick={() => setSelectedSpotId(spot.id)}
+                                        className={`w-full text-left p-3 rounded-xl border transition flex items-center justify-between ${isSelected ? 'bg-meiho-red text-white border-meiho-red shadow-md' : isDone ? 'bg-green-50 border-green-200 text-slate-800' : 'bg-white border-slate-200 text-slate-700 hover:border-meiho-orange'}`}
+                                    >
+                                        <div className="flex items-center space-x-3">
+                                            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${isSelected ? 'bg-white text-meiho-red' : isDone ? 'bg-green-600 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                                                {isDone ? '✓' : idx + 1}
+                                            </span>
+                                            <div>
+                                                <p className="font-bold text-xs sm:text-sm line-clamp-1">{spot.title}</p>
+                                                <p className={`text-[11px] ${isSelected ? 'text-red-100' : 'text-slate-400'}`}>{spot.floor}</p>
+                                            </div>
+                                        </div>
+                                        <i className={`fa-solid fa-chevron-right text-xs ${isSelected ? 'text-white' : 'text-slate-300'}`}></i>
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        {/* 右側：照片上傳與反思填寫面板 (8 Cols) */}
+                        <div className="lg:col-span-8 bg-white p-5 rounded-2xl shadow-md border border-meiho-sand space-y-6">
+                            
+                            {/* 當前景點介紹 */}
+                            <div className="border-b border-slate-100 pb-4">
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <span className="text-xs bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded">
+                                            {currentSpot.category} · {currentSpot.floor}
+                                        </span>
+                                        <h3 className="text-xl font-bold text-meiho-slate mt-1">{currentSpot.title}</h3>
+                                    </div>
+                                    <button 
+                                        onClick={() => onOpenSpot(currentSpot)}
+                                        className="text-xs bg-meiho-cream text-meiho-darkred border border-meiho-sand hover:bg-meiho-sand px-3 py-1.5 rounded-lg font-medium transition flex items-center space-x-1"
+                                    >
+                                        <i className="fa-solid fa-book-open"></i>
+                                        <span>閱讀詳細導賞資料</span>
+                                    </button>
+                                </div>
+                                <p className="text-xs text-slate-600 mt-2 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                    <i className="fa-solid fa-circle-info text-meiho-orange mr-1.5"></i>
+                                    {currentSpot.shortDesc}
+                                </p>
+                            </div>
+
+                            <form onSubmit={handleSubmit} className="space-y-6">
+                                {/* 區塊一：現場拍照 / 上傳照片 */}
+                                <div>
+                                    <label className="block font-bold text-sm text-slate-800 mb-2 flex items-center">
+                                        <i className="fa-solid fa-camera text-meiho-red mr-2"></i>
+                                        1. 現場景點考察拍照打卡
+                                    </label>
+                                    
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+                                        {/* 照片預覽框 */}
+                                        <div className="relative w-full h-48 rounded-xl bg-slate-100 border-2 border-dashed border-slate-300 flex items-center justify-center overflow-hidden">
+                                            {imagePreview ? (
+                                                <div className="relative w-full h-full">
+                                                    <img src={imagePreview} alt="研學拍攝照片" className="w-full h-full object-cover" />
+                                                    <button 
+                                                        type="button" 
+                                                        onClick={() => setImagePreview('')}
+                                                        className="absolute top-2 right-2 bg-black/70 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600"
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <div className="text-center p-4">
+                                                    <i className="fa-solid fa-cloud-arrow-up text-3xl text-slate-400 mb-2"></i>
+                                                    <p className="text-xs text-slate-500 font-medium">尚未上傳現場照片</p>
+                                                    <p className="text-[10px] text-slate-400">點擊右側按鈕拍照上傳</p>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* 上傳操作按鈕 */}
+                                        <div className="space-y-2">
+                                            <input 
+                                                type="file" 
+                                                accept="image/*" 
+                                                ref={fileInputRef}
+                                                onChange={handleImageChange}
+                                                className="hidden" 
+                                            />
+                                            <button 
+                                                type="button"
+                                                onClick={() => fileInputRef.current.click()}
+                                                className="w-full py-2.5 px-4 bg-meiho-slate text-white text-xs font-semibold rounded-xl hover:bg-slate-700 transition flex items-center justify-center space-x-2"
+                                            >
+                                                <i className="fa-solid fa-upload"></i>
+                                                <span>拍照 / 從手機相冊選擇照片</span>
+                                            </button>
+                                            <button 
+                                                type="button"
+                                                onClick={handleUseSpotPhoto}
+                                                className="w-full py-2.5 px-4 bg-meiho-cream text-meiho-darkred border border-meiho-sand text-xs font-semibold rounded-xl hover:bg-meiho-sand transition flex items-center justify-center space-x-2"
+                                            >
+                                                <i className="fa-solid fa-image"></i>
+                                                <span>帶入展區現場高清參考照片</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* 區塊二：研學思考題與個人心得 */}
+                                <div>
+                                    <label className="block font-bold text-sm text-slate-800 mb-2 flex items-center">
+                                        <i className="fa-solid fa-pen-to-square text-meiho-red mr-2"></i>
+                                        2. 研學思考題與學習反思撰寫
+                                    </label>
+
+                                    {/* 思考引導 */}
+                                    <div className="bg-amber-50 border-l-4 border-amber-400 p-3 rounded-r-xl mb-3">
+                                        <p className="text-xs font-bold text-amber-900 mb-1">💡 請結合現場觀察回答以下思考題：</p>
+                                        <ul className="list-disc list-inside text-xs text-amber-800 space-y-1">
+                                            {currentSpot.questions.map((q, qIdx) => (
+                                                <li key={qIdx}>{q}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+
+                                    <textarea 
+                                        rows="5"
+                                        value={inputText}
+                                        onChange={(e) => setInputText(e.target.value)}
+                                        placeholder="請在此處詳細寫下你的觀察心得、回答上述思考問題..."
+                                        className="w-full p-3 border border-slate-300 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-meiho-orange focus:border-transparent custom-scrollbar leading-relaxed"
+                                    ></textarea>
+                                </div>
+
+                                {/* 提交按鈕 */}
+                                <div className="flex items-center justify-between pt-2">
+                                    <span className="text-xs text-slate-400">
+                                        {studentLogs[currentSpot.id]?.timestamp ? `上次打卡時間: ${studentLogs[currentSpot.id].timestamp}` : '尚未提交此景點'}
+                                    </span>
+                                    <button 
+                                        type="submit"
+                                        className="bg-meiho-red hover:bg-meiho-darkred text-white text-xs sm:text-sm font-bold px-6 py-2.5 rounded-xl shadow-md transition flex items-center space-x-2"
+                                    >
+                                        <i className="fa-solid fa-floppy-disk"></i>
+                                        <span>儲存並提交打卡紀錄</span>
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function HistoryView() {
+            const TIMELINE_EVENTS = [
+                {
+                    year: '1953年12月25日',
+                    title: '石硤尾木屋區聖誕夜大火',
+                    desc: '石硤尾寮屋區發生罕見大火，數萬間木屋付諸一炬，導致58,000名居民一夕之間無家可歸。這場浩劫迫使政府直接介入公共房屋建造。'
+                },
+                {
+                    year: '1954年',
+                    title: '興建第一批「徙置大廈」（美荷樓落成）',
+                    desc: '香港首批8座六層高的「H型」徙置大廈在石硤尾迅速竣工，美荷樓（當時為第15座）正式登場，宣告香港公共房屋歷史的開端。'
+                },
+                {
+                    year: '1970年代',
+                    title: '「十年建屋計劃」與美荷樓改建',
+                    desc: '政府推行現代化公屋改革。美荷樓進行結構改建，將兩個微型單位打通，增設獨立廚房及浴室，生活環境顯著改善。'
+                },
+                {
+                    year: '2008年',
+                    title: '列為二級歷史建築與活化計劃',
+                    desc: '美荷樓獲評為二級歷史建築，並被納入發展局第一期「活化歷史建築夥伴計劃」，由香港青年旅舍協會（YHA）負責活化營運。'
+                },
+                {
+                    year: '2013年至今',
+                    title: 'YHA美荷樓青年旅舍與美荷樓生活館揭幕',
+                    desc: '美荷樓成功活化為兼具青年旅舍與歷史展覽館的社區地標，開創了「保育與實用並重」的歷史建築轉型先例。'
+                }
+            ];
+
+            return (
+                <div className="space-y-8 animate-fadeIn">
+                    {/* 頂部主題橫幅 */}
+                    <div className="bg-meiho-slate text-white p-6 rounded-2xl shadow-lg flex flex-col md:flex-row justify-between items-center gap-6">
+                        <div className="space-y-2 max-w-2xl">
+                            <span className="text-xs bg-meiho-orange text-white px-2.5 py-1 rounded font-bold uppercase">
+                                香港公屋史的活化石
+                            </span>
+                            <h2 className="text-2xl sm:text-3xl font-bold">美荷樓歷史發展與建築文化百科</h2>
+                            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                                美荷樓不僅是一座建築，更是香港人「獅子山下」奮鬥精神與公共房屋發展歷程的歷史見證。透過以下時間線與專有名詞，深入理解其歷史脈絡。
+                            </p>
+                        </div>
+                        <div className="flex-shrink-0 text-center">
+                            <div className="w-24 h-24 rounded-2xl bg-meiho-red/80 border-2 border-white/20 flex flex-col items-center justify-center p-2 shadow-inner">
+                                <span className="text-3xl font-extrabold text-yellow-300">1954</span>
+                                <span className="text-[10px] text-red-100 mt-1">美荷樓建造年份</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 歷史時間線 Timeline */}
+                    <div className="bg-white p-6 rounded-2xl shadow-md border border-meiho-sand">
+                        <h3 className="font-bold text-lg text-meiho-slate mb-6 flex items-center">
+                            <i className="fa-solid fa-timeline text-meiho-red mr-2"></i>
+                            美荷樓與石硤尾歷史大事記
+                        </h3>
+
+                        <div className="relative border-l-2 border-meiho-orange/40 ml-3 sm:ml-6 space-y-8 pb-4">
+                            {TIMELINE_EVENTS.map((item, idx) => (
+                                <div key={idx} className="relative pl-6 sm:pl-8 group">
+                                    <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-meiho-red border-2 border-white shadow"></div>
+                                    
+                                    <div className="bg-meiho-cream p-4 rounded-xl border border-meiho-sand hover:border-meiho-orange transition">
+                                        <span className="text-xs font-bold text-meiho-orange bg-orange-100 px-2 py-0.5 rounded">
+                                            {item.year}
+                                        </span>
+                                        <h4 className="font-bold text-base text-meiho-slate mt-1 mb-1">{item.title}</h4>
+                                        <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">{item.desc}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* 歷史圖解名詞卡片 */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-meiho-sand space-y-2">
+                            <div className="w-10 h-10 rounded-xl bg-red-100 text-meiho-red flex items-center justify-center font-bold text-lg">
+                                <i className="fa-solid fa-fire"></i>
+                            </div>
+                            <h4 className="font-bold text-base text-slate-800">1. 徙置區 (Resettlement Estate)</h4>
+                            <p className="text-xs text-slate-600 leading-relaxed">
+                                指港英政府為急需安置災民及木屋區居民而興建的早期廉租房屋。當時設計以快速興建、極簡成本為核心考量。
+                            </p>
+                        </div>
+
+                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-meiho-sand space-y-2">
+                            <div className="w-10 h-10 rounded-xl bg-orange-100 text-meiho-orange flex items-center justify-center font-bold text-lg">
+                                <i className="fa-solid fa-cubes"></i>
+                            </div>
+                            <h4 className="font-bold text-base text-slate-800">2. H 型大廈結構 (H-Block)</h4>
+                            <p className="text-xs text-slate-600 leading-relaxed">
+                                第一代徙置大廈經典外型。兩翼為住戶房間，中間橫樑集中設置浴室與水龍頭，兼具結構穩定性與公用設施便利性。
+                            </p>
+                        </div>
+
+                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-meiho-sand space-y-2">
+                            <div className="w-10 h-10 rounded-xl bg-green-100 text-meiho-green flex items-center justify-center font-bold text-lg">
+                                <i className="fa-solid fa-recycle"></i>
+                            </div>
+                            <h4 className="font-bold text-base text-slate-800">3. 活化歷史建築</h4>
+                            <p className="text-xs text-slate-600 leading-relaxed">
+                                將具有歷史價值的舊建築進行結構修復與功能改造，賦予其全新社會使命（如美荷樓改為旅舍與生活館）。
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function GalleryAndTeacherView({ spots, studentLogs, studentProfile, teacherFeedback, setTeacherFeedback }) {
+            const completedSpots = spots.filter(spot => studentLogs[spot.id]?.completed);
+            const isStudentSubmitted = completedSpots.length > 0;
+
+            const handlePrintReport = () => {
+                window.print();
+            };
+
+            return (
+                <div className="space-y-6 animate-fadeIn">
+                    {/* 頂部標頭 */}
+                    <div className="bg-meiho-darkred text-white p-5 rounded-2xl shadow-md flex flex-col md:flex-row justify-between items-center gap-4">
+                        <div>
+                            <span className="bg-yellow-400 text-meiho-darkred text-xs px-2.5 py-1 rounded font-bold uppercase">
+                                分享天地 & 教師審閱
+                            </span>
+                            <h2 className="text-2xl font-bold mt-1">學生研學成果展示與教師管理評分</h2>
+                            <p className="text-xs text-red-100">學生打卡相片與研學反思集結區，供教師批改評分、給予反饋及導出 PDF 報告。</p>
+                        </div>
+                        <div className="flex space-x-2 no-print">
+                            <button 
+                                onClick={handlePrintReport}
+                                className="bg-white text-meiho-darkred font-bold text-xs px-4 py-2.5 rounded-xl shadow hover:bg-slate-100 transition flex items-center space-x-2"
+                            >
+                                <i className="fa-solid fa-print"></i>
+                                <span>列印 / 匯出研學報告 PDF</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                        {/* 左側：學生個人研學檔案卡 (4 Cols) */}
+                        <div className="lg:col-span-4 space-y-4">
+                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-meiho-sand space-y-4">
+                                <h3 className="font-bold text-base text-meiho-slate flex items-center justify-between border-b pb-2">
+                                    <span><i className="fa-solid fa-id-card text-meiho-orange mr-2"></i>研學學生資料</span>
+                                    {teacherFeedback.featured && (
+                                        <span className="text-xs bg-yellow-100 text-yellow-800 font-bold px-2 py-0.5 rounded-full">
+                                            ★ 精選作品
+                                        </span>
+                                    )}
+                                </h3>
+
+                                <div className="space-y-2 text-xs text-slate-700">
+                                    <div className="flex justify-between">
+                                        <span className="text-slate-400">學生姓名：</span>
+                                        <span className="font-bold text-slate-900">{studentProfile.name || '尚未填寫'}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-slate-400">學校：</span>
+                                        <span className="font-medium">{studentProfile.school || '尚未填寫'}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-slate-400">班別/學號：</span>
+                                        <span className="font-medium">{studentProfile.className ? `${studentProfile.className} (${studentProfile.studentNo || '0'}號)` : '尚未填寫'}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-slate-400">研學打卡完成度：</span>
+                                        <span className="font-bold text-meiho-red">{completedSpots.length} / {spots.length} 個景點</span>
+                                    </div>
+                                </div>
+
+                                {/* 教師評分區 */}
+                                <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 space-y-3 no-print">
+                                    <h4 className="font-bold text-xs text-amber-900 flex items-center justify-between">
+                                        <span><i className="fa-solid fa-chalkboard-user text-meiho-orange mr-1"></i> 教師管理與評分面板</span>
+                                    </h4>
+
+                                    <div>
+                                        <label className="text-[11px] text-amber-800 block mb-1">評定級別：</label>
+                                        <select 
+                                            value={teacherFeedback.grade}
+                                            onChange={(e) => setTeacherFeedback({...teacherFeedback, grade: e.target.value})}
+                                            className="w-full bg-white border border-amber-300 rounded-lg p-2 text-xs font-bold text-meiho-red focus:outline-none"
+                                        >
+                                            <option value="未評分">尚未評分</option>
+                                            <option value="A+ (特優)">A+ (特優 - 觀察深刻獨到)</option>
+                                            <option value="A (優良)">A (優良 - 內容完整詳實)</option>
+                                            <option value="B (合格)">B (合格 - 完成基本答題)</option>
+                                            <option value="C (須改善)">C (須改善 - 答案過於簡略)</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="text-[11px] text-amber-800 block mb-1">教師評語與指導建議：</label>
+                                        <textarea 
+                                            rows="3"
+                                            placeholder="請輸入給學生的批改評語..."
+                                            value={teacherFeedback.comment}
+                                            onChange={(e) => setTeacherFeedback({...teacherFeedback, comment: e.target.value})}
+                                            className="w-full p-2 border border-amber-300 rounded-lg text-xs focus:outline-none bg-white"
+                                        ></textarea>
+                                    </div>
+
+                                    <div className="flex items-center justify-between pt-1">
+                                        <label className="flex items-center text-xs text-amber-900 cursor-pointer">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={teacherFeedback.featured}
+                                                onChange={(e) => setTeacherFeedback({...teacherFeedback, featured: e.target.checked})}
+                                                className="mr-1.5 rounded text-meiho-red focus:ring-meiho-orange"
+                                            />
+                                            設為優質精選反思作品
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 右側：打卡相片集與反思卡片 (8 Cols) */}
+                        <div className="lg:col-span-8 space-y-4">
+                            <h3 className="font-bold text-lg text-meiho-slate flex items-center justify-between">
+                                <span><i className="fa-solid fa-photo-film text-meiho-red mr-2"></i>研學拍攝相片與反思展示冊</span>
+                                {teacherFeedback.grade !== '未評分' && (
+                                    <span className="text-xs bg-meiho-red text-white font-bold px-3 py-1 rounded-full">
+                                        教師評分：{teacherFeedback.grade}
+                                    </span>
+                                )}
+                            </h3>
+
+                            {/* 教師評語展示區（若已填寫） */}
+                            {teacherFeedback.comment && (
+                                <div className="bg-amber-100/80 border-l-4 border-amber-500 p-4 rounded-r-xl">
+                                    <h4 className="font-bold text-xs text-amber-900 mb-1 flex items-center">
+                                        <i className="fa-solid fa-comment-dots text-meiho-orange mr-2"></i> 教師評語回饋：
+                                    </h4>
+                                    <p className="text-xs text-amber-800 italic leading-relaxed">{teacherFeedback.comment}</p>
+                                </div>
+                            )}
+
+                            {!isStudentSubmitted ? (
+                                <div className="bg-white p-12 rounded-2xl border border-dashed border-slate-300 text-center space-y-3">
+                                    <i className="fa-solid fa-camera-retro text-4xl text-slate-300"></i>
+                                    <h4 className="font-bold text-slate-600 text-base">尚未完成任何景點打卡</h4>
+                                    <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                                        請前往「拍照打卡與反思手冊」分頁，填寫你的學生名字，並上傳景點照片與寫下考察心得。
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {spots.map(spot => {
+                                        const log = studentLogs[spot.id];
+                                        if (!log?.completed) return null;
+
+                                        return (
+                                            <div key={spot.id} className="bg-white p-4 rounded-2xl shadow-sm border border-meiho-sand space-y-3">
+                                                <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                                                    <div>
+                                                        <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded mr-2">
+                                                            {spot.category}
+                                                        </span>
+                                                        <span className="font-bold text-sm text-meiho-slate">{spot.title}</span>
+                                                    </div>
+                                                    <span className="text-[10px] text-slate-400">
+                                                        {log.timestamp}
+                                                    </span>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-start">
+                                                    {/* 照片 */}
+                                                    <div className="sm:col-span-5 h-40 rounded-xl overflow-hidden bg-slate-100 border border-slate-200">
+                                                        <img 
+                                                            src={log.photo || spot.image} 
+                                                            alt={spot.title}
+                                                            onError={(e) => { e.target.src = spot.fallbackImg; }}
+                                                            className="w-full h-full object-cover" 
+                                                        />
+                                                    </div>
+
+                                                    {/* 心得內文 */}
+                                                    <div className="sm:col-span-7 bg-meiho-cream p-3 rounded-xl border border-meiho-sand text-xs leading-relaxed text-slate-700 h-full flex flex-col justify-between">
+                                                        <div>
+                                                            <p className="font-bold text-meiho-darkred mb-1">
+                                                                <i className="fa-solid fa-quote-left mr-1 opacity-50"></i>
+                                                                學生觀察反思：
+                                                            </p>
+                                                            <p className="whitespace-pre-line text-slate-800 font-normal">{log.reflection}</p>
+                                                        </div>
+                                                        <div className="mt-3 pt-2 border-t border-meiho-sand/60 text-[10px] text-slate-400 flex justify-between">
+                                                            <span>對應展區：{spot.floor}</span>
+                                                            <span className="text-green-600 font-semibold">✓ 已打卡驗證</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function SpotDetailModal({ spot, studentLog, onClose, onSave }) {
+            return (
+                <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-fadeIn">
+                    <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto custom-scrollbar shadow-2xl border border-meiho-sand flex flex-col">
+                        
+                        {/* 頂部圖片大圖 */}
+                        <div className="relative h-60 sm:h-72 w-full bg-slate-900">
+                            <img 
+                                src={spot.image} 
+                                alt={spot.title}
+                                onError={(e) => { e.target.src = spot.fallbackImg; }}
+                                className="w-full h-full object-cover opacity-90"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
+                            
+                            <button 
+                                onClick={onClose}
+                                className="absolute top-4 right-4 bg-black/60 text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-meiho-red transition text-sm"
+                            >
+                                ✕
+                            </button>
+
+                            <div className="absolute bottom-4 left-4 right-4 text-white">
+                                <span className="bg-meiho-orange text-white text-[10px] font-bold px-2 py-0.5 rounded mr-2">
+                                    {spot.category}
+                                </span>
+                                <span className="text-xs text-slate-300">{spot.floor}</span>
+                                <h3 className="text-xl sm:text-2xl font-bold mt-1">{spot.title}</h3>
+                            </div>
+                        </div>
+
+                        {/* 詳細內容 */}
+                        <div className="p-6 space-y-6 flex-1">
+                            <div className="space-y-3">
+                                <h4 className="font-bold text-base text-meiho-slate border-b border-meiho-sand pb-1 flex items-center">
+                                    <i className="fa-solid fa-landmark text-meiho-red mr-2"></i>
+                                    歷史背景與建築意義
+                                </h4>
+                                <p className="text-xs sm:text-sm text-slate-700 leading-relaxed bg-meiho-cream p-3 rounded-xl border border-meiho-sand">
+                                    {spot.history}
+                                </p>
+
+                                <h4 className="font-bold text-base text-meiho-slate border-b border-meiho-sand pb-1 flex items-center pt-2">
+                                    <i className="fa-solid fa-house-chimney-window text-meiho-orange mr-2"></i>
+                                    建築特徵與現場觀察點
+                                </h4>
+                                <p className="text-xs sm:text-sm text-slate-700 leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-200">
+                                    {spot.architecturalDetail}
+                                </p>
+                            </div>
+
+                            {/* 思考引導 */}
+                            <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 space-y-2">
+                                <h4 className="font-bold text-xs text-amber-900 flex items-center">
+                                    <i className="fa-solid fa-lightbulb text-amber-500 mr-2"></i>
+                                    研學思考引導問題：
+                                </h4>
+                                <ul className="list-disc list-inside text-xs text-amber-800 space-y-1">
+                                    {spot.questions.map((q, idx) => (
+                                        <li key={idx}>{q}</li>
+                                    ))}
+                                </ul>
+                            </div>
+                        </div>
+
+                        {/* 底部按鈕 */}
+                        <div className="bg-slate-50 px-6 py-4 border-t border-slate-200 flex justify-between items-center">
+                            <span className="text-xs text-slate-500">
+                                {studentLog?.completed ? '✅ 你已完成此景點的打卡' : '💡 請切換至「手冊」分頁填寫個人反思'}
+                            </span>
+                            <button 
+                                onClick={onClose}
+                                className="bg-meiho-slate text-white text-xs font-bold px-5 py-2.5 rounded-xl hover:bg-slate-700 transition"
+                            >
+                                關閉視窗
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
