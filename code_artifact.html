@@ -32,6 +32,8 @@
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Supabase 雲端數據庫 SDK（未配置時自動使用本機演示模式） -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- 高德地圖 JS API 2.0 -->
@@ -216,6 +218,169 @@
             }
         ];
 
+        // ==========================================
+        // 雲端數據庫配置（Supabase）
+        // 註冊 https://supabase.com 建立項目後：
+        //   1. 在 SQL Editor 執行建表腳本（見項目說明）
+        //   2. 在 Authentication 建立教師帳號（郵箱對應下方 teacherEmail，密碼即「統一管理密碼」）
+        //   3. 把 Project URL 與 anon key 填入下方 → 自動切換為雲端模式
+        // 留空則使用「本機演示模式」（資料僅存於當前瀏覽器）。
+        // ==========================================
+        const SUPABASE_CONFIG = {
+            url: '',
+            anonKey: '',
+            teacherEmail: 'teacher@meiho.hk'
+        };
+        const DEMO_TEACHER_PASSWORD = 'meiho2026'; // 僅「本機演示模式」的教師密碼
+
+        // 圖片壓縮：發表作品前把照片壓至 800px 內，減少數據庫體積
+        const compressImage = (dataUrl, maxSize = 800, quality = 0.72) => new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => {
+                try {
+                    let width = img.naturalWidth;
+                    let height = img.naturalHeight;
+                    if (width > maxSize || height > maxSize) {
+                        const ratio = Math.min(maxSize / width, maxSize / height);
+                        width = Math.round(width * ratio);
+                        height = Math.round(height * ratio);
+                    }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                    resolve(canvas.toDataURL('image/jpeg', quality));
+                } catch (e) {
+                    resolve(dataUrl); // 畫布被跨域污染等情況，退回原圖
+                }
+            };
+            img.onerror = () => resolve(dataUrl);
+            img.src = dataUrl;
+        });
+
+        // 作品數據層：自動在「雲端 Supabase」與「本機演示」之間切換
+        const WorkStore = (() => {
+            const LS_WORKS = 'meiho_works_demo_v1';
+            const LS_TEACHER = 'meiho_teacher_demo_v1';
+            let client = null;
+
+            const isCloud = () => Boolean(SUPABASE_CONFIG.url && SUPABASE_CONFIG.anonKey && window.supabase && window.supabase.createClient);
+            const getClient = () => {
+                if (!client) client = window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
+                return client;
+            };
+            const lsGet = () => { try { return JSON.parse(localStorage.getItem(LS_WORKS) || '[]'); } catch (e) { return []; } };
+            const lsSet = (arr) => { try { localStorage.setItem(LS_WORKS, JSON.stringify(arr)); } catch (e) { console.error('本機儲存失敗', e); } };
+
+            return {
+                mode: () => (isCloud() ? 'cloud' : 'demo'),
+
+                // 學生發表作品（新作品一律為 pending，待教師審閱）
+                async submitWork(work) {
+                    if (isCloud()) {
+                        const { error } = await getClient().from('works').insert(work);
+                        if (error) throw error;
+                    } else {
+                        const arr = lsGet();
+                        arr.unshift({ id: 'w-' + Date.now(), created_at: new Date().toISOString(), ...work, status: 'pending', grade: '', comment: '', featured: false });
+                        lsSet(arr);
+                    }
+                },
+
+                // 已發表作品（訪客可見）
+                async listPublished() {
+                    if (isCloud()) {
+                        const { data, error } = await getClient().from('works').select('*').eq('status', 'published').order('created_at', { ascending: false });
+                        if (error) throw error;
+                        return data || [];
+                    }
+                    return lsGet().filter(w => w.status === 'published');
+                },
+
+                // 全部作品（教師批閱用，需登入）
+                async listAll() {
+                    if (isCloud()) {
+                        const { data, error } = await getClient().from('works').select('*').order('created_at', { ascending: false });
+                        if (error) throw error;
+                        return data || [];
+                    }
+                    return lsGet();
+                },
+
+                // 教師登入：雲端模式用 Supabase Auth（統一管理密碼），演示模式校對預設密碼
+                async signIn(password) {
+                    if (isCloud()) {
+                        const { error } = await getClient().auth.signInWithPassword({ email: SUPABASE_CONFIG.teacherEmail, password: password });
+                        if (error) throw error;
+                    } else {
+                        if (password !== DEMO_TEACHER_PASSWORD) throw new Error('密碼錯誤');
+                        localStorage.setItem(LS_TEACHER, '1');
+                    }
+                },
+
+                async signOut() {
+                    if (isCloud()) { try { await getClient().auth.signOut(); } catch (e) { /* 忽略 */ } }
+                    localStorage.removeItem(LS_TEACHER);
+                },
+
+                async isTeacher() {
+                    if (isCloud()) {
+                        try {
+                            const { data } = await getClient().auth.getSession();
+                            return Boolean(data && data.session);
+                        } catch (e) { return false; }
+                    }
+                    return localStorage.getItem(LS_TEACHER) === '1';
+                },
+
+                // 教師批閱：更新評級/評語/精選/狀態
+                async reviewWork(id, patch) {
+                    const payload = { ...patch, reviewed_at: new Date().toISOString() };
+                    if (isCloud()) {
+                        const { error } = await getClient().from('works').update(payload).eq('id', id);
+                        if (error) throw error;
+                    } else {
+                        const arr = lsGet();
+                        const idx = arr.findIndex(w => w.id === id);
+                        if (idx >= 0) { arr[idx] = { ...arr[idx], ...payload }; lsSet(arr); }
+                    }
+                },
+
+                async deleteWork(id) {
+                    if (isCloud()) {
+                        const { error } = await getClient().from('works').delete().eq('id', id);
+                        if (error) throw error;
+                    } else {
+                        lsSet(lsGet().filter(w => w.id !== id));
+                    }
+                }
+            };
+        })();
+
+        // 統一作品資料格式（雲端 snake_case 欄位 / 本機皆可）
+        const normalizeWork = (w) => ({
+            id: w.id,
+            createdAt: w.created_at || w.createdAt || new Date().toISOString(),
+            studentName: w.student_name || w.studentName || '匿名',
+            className: w.class_name || w.className || '',
+            studentNo: w.student_no || w.studentNo || '',
+            school: w.school || '',
+            spotId: w.spot_id || w.spotId || '',
+            spotTitle: w.spot_title || w.spotTitle || '',
+            photo: w.photo || '',
+            reflection: w.reflection || '',
+            status: w.status || 'pending',
+            grade: w.grade || '',
+            comment: w.comment || '',
+            featured: Boolean(w.featured)
+        });
+
+        const formatDateTime = (iso) => {
+            try {
+                return new Date(iso).toLocaleString('zh-HK', { hour12: false }).slice(0, 16);
+            } catch (e) { return ''; }
+        };
+
         function App() {
             const [activeTab, setActiveTab] = React.useState('map'); // 'map', 'workbook', 'history', 'gallery'
             const [selectedSpot, setSelectedSpot] = React.useState(MEI_HO_SPOTS[0]);
@@ -231,13 +396,6 @@
 
             // 學生打卡紀錄狀態
             const [studentLogs, setStudentLogs] = React.useState({});
-
-            // 教師評級與評語紀錄
-            const [teacherFeedback, setTeacherFeedback] = React.useState({
-                grade: '未評分',
-                comment: '',
-                featured: false
-            });
 
             const [toastMessage, setToastMessage] = React.useState('');
 
@@ -266,6 +424,37 @@
                 };
                 setStudentLogs(updated);
                 showToast('✅ 已成功儲存打卡照片與研學反思！');
+            };
+
+            // 發表作品到分享天地（寫入數據庫，待教師審閱後公開）
+            const handlePublishWork = async (spotId, photoData, reflectionText) => {
+                if (!studentProfile.name.trim() || !studentProfile.className.trim()) {
+                    showToast('⚠️ 請先填寫「學生姓名」與「班別」，才能發表作品！');
+                    return false;
+                }
+                const spot = MEI_HO_SPOTS.find(s => s.id === spotId);
+                try {
+                    let photo = '';
+                    if (photoData) {
+                        photo = photoData.startsWith('data:') ? await compressImage(photoData) : photoData;
+                    }
+                    await WorkStore.submitWork({
+                        student_name: studentProfile.name.trim(),
+                        class_name: studentProfile.className.trim(),
+                        student_no: (studentProfile.studentNo || '').trim(),
+                        school: (studentProfile.school || '').trim(),
+                        spot_id: spotId,
+                        spot_title: spot ? spot.title : spotId,
+                        photo: photo,
+                        reflection: reflectionText.trim()
+                    });
+                    showToast('🌟 作品已發表！待教師審閱後將展示於分享天地');
+                    return true;
+                } catch (e) {
+                    console.error('發表作品失敗', e);
+                    showToast('❌ 發表失敗：' + (e.message || '網路異常，請稍後重試'));
+                    return false;
+                }
             };
 
             // 計算完成度
@@ -339,7 +528,7 @@
                                     className={`px-4 py-2.5 font-medium flex items-center space-x-2 border-b-2 whitespace-nowrap transition ${activeTab === 'gallery' ? 'border-yellow-400 text-yellow-300 bg-meiho-red/50' : 'border-transparent text-red-100 hover:text-white'}`}
                                 >
                                     <i className="fa-solid fa-chalkboard-user"></i>
-                                    <span>分享天地 (教師審閱與學生作品)</span>
+                                    <span>分享天地 (學生作品 · 教師批閱)</span>
                                 </button>
                             </div>
                         </nav>
@@ -373,6 +562,7 @@
                                 studentProfile={studentProfile}
                                 setStudentProfile={setStudentProfile}
                                 onSaveReflection={handleSaveReflection}
+                                onPublishWork={handlePublishWork}
                                 onOpenSpot={handleOpenSpot}
                             />
                         )}
@@ -382,13 +572,7 @@
                         )}
 
                         {activeTab === 'gallery' && (
-                            <GalleryAndTeacherView 
-                                spots={MEI_HO_SPOTS} 
-                                studentLogs={studentLogs}
-                                studentProfile={studentProfile}
-                                teacherFeedback={teacherFeedback}
-                                setTeacherFeedback={setTeacherFeedback}
-                            />
+                            <ShareView showToast={showToast} />
                         )}
                     </main>
 
@@ -747,10 +931,11 @@
             );
         }
 
-        function WorkbookView({ spots, studentLogs, studentProfile, setStudentProfile, onSaveReflection, onOpenSpot }) {
+        function WorkbookView({ spots, studentLogs, studentProfile, setStudentProfile, onSaveReflection, onOpenSpot, onPublishWork }) {
             const [selectedSpotId, setSelectedSpotId] = React.useState(spots[0].id);
             const [inputText, setInputText] = React.useState('');
             const [imagePreview, setImagePreview] = React.useState('');
+            const [publishing, setPublishing] = React.useState(false);
             const fileInputRef = React.useRef(null);
 
             // 切換景點時載入資料
@@ -796,6 +981,17 @@
                     return;
                 }
                 onSaveReflection(selectedSpotId, imagePreview, inputText);
+            };
+
+            // 發表作品到分享天地（雲端提交，待教師審閱）
+            const handlePublish = async () => {
+                if (!inputText.trim()) {
+                    alert('請先填寫研學心得與思考題答案，再發表作品！');
+                    return;
+                }
+                setPublishing(true);
+                await onPublishWork(selectedSpotId, imagePreview, inputText);
+                setPublishing(false);
             };
 
             return (
@@ -997,18 +1193,33 @@
                                 </div>
 
                                 {/* 提交按鈕 */}
-                                <div className="flex items-center justify-between pt-2">
+                                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
                                     <span className="text-xs text-slate-400">
                                         {studentLogs[currentSpot.id]?.timestamp ? `上次打卡時間: ${studentLogs[currentSpot.id].timestamp}` : '尚未提交此景點'}
                                     </span>
-                                    <button 
-                                        type="submit"
-                                        className="bg-meiho-red hover:bg-meiho-darkred text-white text-xs sm:text-sm font-bold px-6 py-2.5 rounded-xl shadow-md transition flex items-center space-x-2"
-                                    >
-                                        <i className="fa-solid fa-floppy-disk"></i>
-                                        <span>儲存並提交打卡紀錄</span>
-                                    </button>
+                                    <div className="flex flex-wrap items-center justify-end gap-2">
+                                        <button
+                                            type="submit"
+                                            className="bg-meiho-red hover:bg-meiho-darkred text-white text-xs sm:text-sm font-bold px-5 py-2.5 rounded-xl shadow-md transition flex items-center space-x-2"
+                                        >
+                                            <i className="fa-solid fa-floppy-disk"></i>
+                                            <span>儲存打卡紀錄</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={publishing}
+                                            onClick={handlePublish}
+                                            className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-xs sm:text-sm font-bold px-5 py-2.5 rounded-xl shadow-md transition flex items-center space-x-2"
+                                        >
+                                            <i className={publishing ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-paper-plane'}></i>
+                                            <span>{publishing ? '發表中…' : '發表作品到分享天地'}</span>
+                                        </button>
+                                    </div>
                                 </div>
+                                <p className="text-[11px] text-slate-400 flex items-start">
+                                    <i className="fa-solid fa-circle-info mr-1.5 text-slate-300 mt-0.5"></i>
+                                    <span>「儲存打卡紀錄」僅保存在本機學習手冊；「發表作品」會提交到作品庫，經教師審閱批改後公開展示於分享天地。</span>
+                                </p>
                             </form>
                         </div>
                     </div>
@@ -1126,13 +1337,235 @@
             );
         }
 
-        function GalleryAndTeacherView({ spots, studentLogs, studentProfile, teacherFeedback, setTeacherFeedback }) {
-            const completedSpots = spots.filter(spot => studentLogs[spot.id]?.completed);
-            const isStudentSubmitted = completedSpots.length > 0;
+        // ==========================================
+        // 分享天地：學生作品展示（公開）+ 教師批閱通道（密碼登入）
+        // ==========================================
+        const STATUS_META = {
+            pending: { label: '待審閱', cls: 'bg-amber-100 text-amber-800 border-amber-300' },
+            published: { label: '已發表', cls: 'bg-green-100 text-green-800 border-green-300' },
+            rejected: { label: '已駁回', cls: 'bg-slate-100 text-slate-500 border-slate-300' }
+        };
+        const GRADE_OPTIONS = [
+            { v: 'A+', label: 'A+ 特優 · 觀察深刻獨到' },
+            { v: 'A', label: 'A 優良 · 內容完整詳實' },
+            { v: 'B', label: 'B 合格 · 完成基本答題' },
+            { v: 'C', label: 'C 須改善 · 答案過於簡略' }
+        ];
 
-            const handlePrintReport = () => {
-                window.print();
+        function GalleryWorkCard({ w }) {
+            return (
+                <div className="bg-white rounded-2xl shadow-sm border border-meiho-sand overflow-hidden flex flex-col">
+                    <div className="h-44 bg-slate-100 relative">
+                        {w.photo ? (
+                            <img src={w.photo} alt="作品照片" className="w-full h-full object-cover" />
+                        ) : (
+                            <div className="w-full h-full flex items-center justify-center text-slate-300"><i className="fa-solid fa-image text-3xl"></i></div>
+                        )}
+                        {w.featured && (
+                            <span className="absolute top-2 right-2 bg-yellow-400 text-meiho-darkred text-[10px] font-bold px-2 py-1 rounded-full shadow">★ 精選作品</span>
+                        )}
+                    </div>
+                    <div className="p-4 space-y-2 flex-1 flex flex-col">
+                        <div className="flex justify-between items-center gap-2">
+                            <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded line-clamp-1">{w.spotTitle}</span>
+                            <span className="text-[10px] text-slate-400 whitespace-nowrap">{formatDateTime(w.createdAt)}</span>
+                        </div>
+                        <h4 className="font-bold text-sm text-meiho-slate">{w.studentName} · {w.className}</h4>
+                        <p className="text-xs text-slate-600 whitespace-pre-line leading-relaxed flex-1">{w.reflection}</p>
+                        {(w.grade || w.comment) && (
+                            <div className="pt-2 border-t border-meiho-sand/60 space-y-1.5">
+                                {w.grade && (
+                                    <span className="inline-block text-[10px] bg-meiho-red text-white font-bold px-2 py-0.5 rounded-full">教師評分：{w.grade}</span>
+                                )}
+                                {w.comment && (
+                                    <p className="text-[11px] text-amber-800 bg-amber-50 border-l-4 border-amber-400 px-2 py-1.5 rounded-r-lg italic leading-relaxed">
+                                        <i className="fa-solid fa-comment-dots mr-1"></i>{w.comment}
+                                    </p>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        function AdminWorkCard({ w, edit, onEdit, onSave, onPublish, onReject, onDelete }) {
+            const meta = STATUS_META[w.status] || STATUS_META.pending;
+            return (
+                <div className="bg-white p-4 rounded-2xl shadow-sm border border-meiho-sand space-y-3">
+                    <div className="flex flex-wrap justify-between items-center gap-2 border-b border-slate-100 pb-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${meta.cls}`}>{meta.label}</span>
+                            <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded">{w.spotTitle}</span>
+                            {w.featured && <span className="text-[10px] bg-yellow-400 text-meiho-darkred font-bold px-2 py-0.5 rounded-full">★ 精選</span>}
+                        </div>
+                        <span className="text-[10px] text-slate-400">{formatDateTime(w.createdAt)}{w.school ? ` · ${w.school}` : ''}</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-4">
+                        <div className="sm:col-span-4">
+                            <div className="h-36 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 mb-2">
+                                {w.photo ? (
+                                    <img src={w.photo} alt="作品照片" className="w-full h-full object-cover" />
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-slate-300"><i className="fa-solid fa-image text-2xl"></i></div>
+                                )}
+                            </div>
+                            <p className="text-xs font-bold text-meiho-darkred">{w.studentName}</p>
+                            <p className="text-[11px] text-slate-500">{w.className}{w.studentNo ? ` · ${w.studentNo}號` : ''}</p>
+                        </div>
+
+                        <div className="sm:col-span-8 space-y-3">
+                            <div className="bg-meiho-cream p-3 rounded-xl border border-meiho-sand text-xs leading-relaxed text-slate-700 max-h-32 overflow-y-auto custom-scrollbar">
+                                <p className="font-bold text-meiho-darkred mb-1"><i className="fa-solid fa-quote-left mr-1 opacity-50"></i>學生反思：</p>
+                                <p className="whitespace-pre-line">{w.reflection}</p>
+                            </div>
+
+                            {/* 批閱控制項 */}
+                            <div className="bg-amber-50 p-3 rounded-xl border border-amber-200 space-y-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 items-end">
+                                    <div>
+                                        <label className="text-[11px] text-amber-800 block mb-1">評定級別：</label>
+                                        <select
+                                            value={edit.grade}
+                                            onChange={(e) => onEdit({ grade: e.target.value })}
+                                            className="w-full bg-white border border-amber-300 rounded-lg p-2 text-xs font-bold text-meiho-red focus:outline-none"
+                                        >
+                                            <option value="">未評分</option>
+                                            {GRADE_OPTIONS.map(g => <option key={g.v} value={g.v}>{g.label}</option>)}
+                                        </select>
+                                    </div>
+                                    <label className="flex items-center text-xs text-amber-900 cursor-pointer pb-2">
+                                        <input
+                                            type="checkbox"
+                                            checked={edit.featured}
+                                            onChange={(e) => onEdit({ featured: e.target.checked })}
+                                            className="mr-1.5 rounded text-meiho-red focus:ring-meiho-orange"
+                                        />
+                                        設為優質精選作品
+                                    </label>
+                                </div>
+                                <textarea
+                                    rows="2"
+                                    placeholder="教師評語與指導建議（審閱通過後會展示給學生與訪客）..."
+                                    value={edit.comment}
+                                    onChange={(e) => onEdit({ comment: e.target.value })}
+                                    className="w-full p-2 border border-amber-300 rounded-lg text-xs focus:outline-none bg-white"
+                                ></textarea>
+                                <div className="flex flex-wrap gap-2">
+                                    <button onClick={onSave} className="bg-meiho-slate hover:bg-slate-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition">
+                                        <i className="fa-solid fa-floppy-disk mr-1"></i>儲存批閱
+                                    </button>
+                                    {w.status !== 'published' && (
+                                        <button onClick={onPublish} className="bg-green-600 hover:bg-green-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition">
+                                            <i className="fa-solid fa-globe mr-1"></i>通過並公開發表
+                                        </button>
+                                    )}
+                                    {w.status !== 'rejected' && (
+                                        <button onClick={onReject} className="bg-slate-200 hover:bg-slate-300 text-slate-600 text-[11px] font-bold px-3 py-1.5 rounded-lg transition">
+                                            <i className="fa-solid fa-rotate-left mr-1"></i>駁回（不公開）
+                                        </button>
+                                    )}
+                                    <button onClick={onDelete} className="bg-red-50 hover:bg-red-100 text-red-600 text-[11px] font-bold px-3 py-1.5 rounded-lg transition ml-auto">
+                                        <i className="fa-solid fa-trash mr-1"></i>刪除
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function ShareView({ showToast }) {
+            const [view, setView] = React.useState('gallery'); // gallery | admin
+            const [works, setWorks] = React.useState([]);
+            const [loading, setLoading] = React.useState(true);
+            const [isTeacher, setIsTeacher] = React.useState(false);
+            const [showLogin, setShowLogin] = React.useState(false);
+            const [pw, setPw] = React.useState('');
+            const [pwBusy, setPwBusy] = React.useState(false);
+            const [pwError, setPwError] = React.useState('');
+            const [filter, setFilter] = React.useState('pending');
+            const [edits, setEdits] = React.useState({});
+            const dbMode = WorkStore.mode();
+
+            const load = async () => {
+                setLoading(true);
+                try {
+                    const teacher = await WorkStore.isTeacher();
+                    setIsTeacher(teacher);
+                    const data = teacher ? await WorkStore.listAll() : await WorkStore.listPublished();
+                    const normalized = data.map(normalizeWork);
+                    setWorks(normalized);
+                    const init = {};
+                    normalized.forEach(w => { init[w.id] = { grade: w.grade, comment: w.comment, featured: w.featured }; });
+                    setEdits(init);
+                } catch (e) {
+                    console.error('讀取作品失敗', e);
+                    showToast('❌ 讀取作品失敗：' + (e.message || '未知錯誤'));
+                }
+                setLoading(false);
             };
+
+            React.useEffect(() => { load(); }, []);
+
+            const handleLogin = async () => {
+                if (!pw.trim()) return;
+                setPwBusy(true);
+                setPwError('');
+                try {
+                    await WorkStore.signIn(pw);
+                    setShowLogin(false);
+                    setPw('');
+                    showToast('✅ 驗證成功，已進入教師批閱後台');
+                    await load();
+                    setView('admin');
+                } catch (e) {
+                    console.error(e);
+                    setPwError('密碼錯誤或登入失敗，請重試');
+                }
+                setPwBusy(false);
+            };
+
+            const handleLogout = async () => {
+                await WorkStore.signOut();
+                setIsTeacher(false);
+                setView('gallery');
+                showToast('已退出教師通道');
+                await load();
+            };
+
+            const saveReview = async (w, extra) => {
+                const e = edits[w.id] || { grade: w.grade, comment: w.comment, featured: w.featured };
+                try {
+                    await WorkStore.reviewWork(w.id, { grade: e.grade, comment: e.comment, featured: e.featured, ...extra });
+                    showToast('✅ 批閱已儲存');
+                    await load();
+                } catch (err) {
+                    console.error(err);
+                    showToast('❌ 儲存失敗：' + (err.message || '未知錯誤'));
+                }
+            };
+
+            const handleDelete = async (w) => {
+                if (!window.confirm(`確定要永久刪除 ${w.studentName} 的這份作品嗎？`)) return;
+                try {
+                    await WorkStore.deleteWork(w.id);
+                    showToast('已刪除該作品');
+                    await load();
+                } catch (err) {
+                    console.error(err);
+                    showToast('❌ 刪除失敗：' + (err.message || '未知錯誤'));
+                }
+            };
+
+            const pendingCount = works.filter(w => w.status === 'pending').length;
+            const publishedCount = works.filter(w => w.status === 'published').length;
+            const featuredCount = works.filter(w => w.status === 'published' && w.featured).length;
+            const shownWorks = view === 'admin'
+                ? (filter === 'all' ? works : works.filter(w => w.status === filter))
+                : works.filter(w => w.status === 'published');
 
             return (
                 <div className="space-y-6 animate-fadeIn">
@@ -1140,183 +1573,168 @@
                     <div className="bg-meiho-darkred text-white p-5 rounded-2xl shadow-md flex flex-col md:flex-row justify-between items-center gap-4">
                         <div>
                             <span className="bg-yellow-400 text-meiho-darkred text-xs px-2.5 py-1 rounded font-bold uppercase">
-                                分享天地 & 教師審閱
+                                分享天地
                             </span>
-                            <h2 className="text-2xl font-bold mt-1">學生研學成果展示與教師管理評分</h2>
-                            <p className="text-xs text-red-100">學生打卡相片與研學反思集結區，供教師批改評分、給予反饋及導出 PDF 報告。</p>
+                            <h2 className="text-2xl font-bold mt-1">學生研學作品展示與教師批閱</h2>
+                            <p className="text-xs text-red-100">
+                                {dbMode === 'cloud'
+                                    ? '已連接雲端數據庫，作品多設備即時同步；教師批閱通過後公開發表。'
+                                    : '目前為本機演示模式，作品僅保存在此瀏覽器（接入 Supabase 後即為雲端多設備同步）。'}
+                            </p>
                         </div>
-                        <div className="flex space-x-2 no-print">
-                            <button 
-                                onClick={handlePrintReport}
-                                className="bg-white text-meiho-darkred font-bold text-xs px-4 py-2.5 rounded-xl shadow hover:bg-slate-100 transition flex items-center space-x-2"
-                            >
-                                <i className="fa-solid fa-print"></i>
-                                <span>列印 / 匯出研學報告 PDF</span>
-                            </button>
+                        <div className="flex flex-wrap justify-center gap-2 no-print">
+                            <span className={`text-[11px] px-3 py-2 rounded-xl font-bold border ${dbMode === 'cloud' ? 'bg-green-500/20 text-green-200 border-green-400/40' : 'bg-yellow-500/20 text-yellow-100 border-yellow-400/40'}`}>
+                                <i className={dbMode === 'cloud' ? 'fa-solid fa-cloud mr-1' : 'fa-solid fa-flask mr-1'}></i>
+                                {dbMode === 'cloud' ? '雲端已連接' : '本機演示模式'}
+                            </span>
+                            {isTeacher && (
+                                <React.Fragment>
+                                    <button
+                                        onClick={() => setView('gallery')}
+                                        className={`font-bold text-xs px-4 py-2.5 rounded-xl shadow transition flex items-center space-x-2 ${view === 'gallery' ? 'bg-yellow-400 text-meiho-darkred' : 'bg-white/10 text-white hover:bg-white/20 border border-white/30'}`}
+                                    >
+                                        <i className="fa-solid fa-images"></i>
+                                        <span>作品展示</span>
+                                    </button>
+                                    <button
+                                        onClick={() => setView('admin')}
+                                        className={`relative font-bold text-xs px-4 py-2.5 rounded-xl shadow transition flex items-center space-x-2 ${view === 'admin' ? 'bg-yellow-400 text-meiho-darkred' : 'bg-white/10 text-white hover:bg-white/20 border border-white/30'}`}
+                                    >
+                                        <i className="fa-solid fa-pen-ruler"></i>
+                                        <span>批閱後台</span>
+                                        {pendingCount > 0 && (
+                                            <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">{pendingCount}</span>
+                                        )}
+                                    </button>
+                                    <button
+                                        onClick={handleLogout}
+                                        className="bg-white text-meiho-darkred font-bold text-xs px-4 py-2.5 rounded-xl shadow hover:bg-slate-100 transition flex items-center space-x-2"
+                                    >
+                                        <i className="fa-solid fa-right-from-bracket"></i>
+                                        <span>退出</span>
+                                    </button>
+                                </React.Fragment>
+                            )}
+                            {!isTeacher && (
+                                <button
+                                    onClick={() => setShowLogin(true)}
+                                    className="bg-white text-meiho-darkred font-bold text-xs px-4 py-2.5 rounded-xl shadow hover:bg-slate-100 transition flex items-center space-x-2"
+                                >
+                                    <i className="fa-solid fa-lock"></i>
+                                    <span>教師通道</span>
+                                </button>
+                            )}
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                        {/* 左側：學生個人研學檔案卡 (4 Cols) */}
-                        <div className="lg:col-span-4 space-y-4">
-                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-meiho-sand space-y-4">
-                                <h3 className="font-bold text-base text-meiho-slate flex items-center justify-between border-b pb-2">
-                                    <span><i className="fa-solid fa-id-card text-meiho-orange mr-2"></i>研學學生資料</span>
-                                    {teacherFeedback.featured && (
-                                        <span className="text-xs bg-yellow-100 text-yellow-800 font-bold px-2 py-0.5 rounded-full">
-                                            ★ 精選作品
-                                        </span>
-                                    )}
-                                </h3>
-
-                                <div className="space-y-2 text-xs text-slate-700">
-                                    <div className="flex justify-between">
-                                        <span className="text-slate-400">學生姓名：</span>
-                                        <span className="font-bold text-slate-900">{studentProfile.name || '尚未填寫'}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span className="text-slate-400">學校：</span>
-                                        <span className="font-medium">{studentProfile.school || '尚未填寫'}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span className="text-slate-400">班別/學號：</span>
-                                        <span className="font-medium">{studentProfile.className ? `${studentProfile.className} (${studentProfile.studentNo || '0'}號)` : '尚未填寫'}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span className="text-slate-400">研學打卡完成度：</span>
-                                        <span className="font-bold text-meiho-red">{completedSpots.length} / {spots.length} 個景點</span>
-                                    </div>
+                    {loading ? (
+                        <div className="bg-white p-12 rounded-2xl border border-dashed border-slate-300 text-center">
+                            <i className="fa-solid fa-spinner fa-spin text-3xl text-meiho-orange"></i>
+                            <p className="text-xs text-slate-400 mt-3">正在讀取作品…</p>
+                        </div>
+                    ) : view === 'admin' && isTeacher ? (
+                        /* 教師批閱後台 */
+                        <div className="space-y-4">
+                            <div className="grid grid-cols-3 gap-3">
+                                <div className="bg-white p-4 rounded-2xl border border-amber-200 text-center shadow-sm">
+                                    <p className="text-2xl font-black text-amber-600">{pendingCount}</p>
+                                    <p className="text-[11px] text-slate-500 font-bold">待審閱</p>
                                 </div>
+                                <div className="bg-white p-4 rounded-2xl border border-green-200 text-center shadow-sm">
+                                    <p className="text-2xl font-black text-green-600">{publishedCount}</p>
+                                    <p className="text-[11px] text-slate-500 font-bold">已發表</p>
+                                </div>
+                                <div className="bg-white p-4 rounded-2xl border border-yellow-200 text-center shadow-sm">
+                                    <p className="text-2xl font-black text-yellow-500">{featuredCount}</p>
+                                    <p className="text-[11px] text-slate-500 font-bold">精選作品</p>
+                                </div>
+                            </div>
 
-                                {/* 教師評分區 */}
-                                <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 space-y-3 no-print">
-                                    <h4 className="font-bold text-xs text-amber-900 flex items-center justify-between">
-                                        <span><i className="fa-solid fa-chalkboard-user text-meiho-orange mr-1"></i> 教師管理與評分面板</span>
-                                    </h4>
+                            <div className="flex flex-wrap gap-2">
+                                {[['pending', '待審閱'], ['published', '已發表'], ['rejected', '已駁回'], ['all', '全部']].map(([k, label]) => (
+                                    <button
+                                        key={k}
+                                        onClick={() => setFilter(k)}
+                                        className={`text-xs font-bold px-4 py-2 rounded-xl border transition ${filter === k ? 'bg-meiho-red text-white border-meiho-red shadow' : 'bg-white text-slate-600 border-slate-200 hover:border-meiho-orange'}`}
+                                    >
+                                        {label}{k === 'pending' && pendingCount > 0 ? ` (${pendingCount})` : ''}
+                                    </button>
+                                ))}
+                            </div>
 
-                                    <div>
-                                        <label className="text-[11px] text-amber-800 block mb-1">評定級別：</label>
-                                        <select 
-                                            value={teacherFeedback.grade}
-                                            onChange={(e) => setTeacherFeedback({...teacherFeedback, grade: e.target.value})}
-                                            className="w-full bg-white border border-amber-300 rounded-lg p-2 text-xs font-bold text-meiho-red focus:outline-none"
-                                        >
-                                            <option value="未評分">尚未評分</option>
-                                            <option value="A+ (特優)">A+ (特優 - 觀察深刻獨到)</option>
-                                            <option value="A (優良)">A (優良 - 內容完整詳實)</option>
-                                            <option value="B (合格)">B (合格 - 完成基本答題)</option>
-                                            <option value="C (須改善)">C (須改善 - 答案過於簡略)</option>
-                                        </select>
+                            {shownWorks.length === 0 ? (
+                                <div className="bg-white p-12 rounded-2xl border border-dashed border-slate-300 text-center space-y-2">
+                                    <i className="fa-solid fa-inbox text-4xl text-slate-300"></i>
+                                    <h4 className="font-bold text-slate-600 text-base">此分類暫無作品</h4>
+                                    <p className="text-xs text-slate-400 max-w-md mx-auto">學生在「學習手冊」點擊「發表作品到分享天地」後，作品會出現在這裡等待批閱。</p>
+                                </div>
+                            ) : (
+                                shownWorks.map(w => (
+                                    <AdminWorkCard
+                                        key={w.id}
+                                        w={w}
+                                        edit={edits[w.id] || { grade: w.grade, comment: w.comment, featured: w.featured }}
+                                        onEdit={(patch) => setEdits(prev => ({ ...prev, [w.id]: { ...(prev[w.id] || { grade: w.grade, comment: w.comment, featured: w.featured }), ...patch } }))}
+                                        onSave={() => saveReview(w, {})}
+                                        onPublish={() => saveReview(w, { status: 'published' })}
+                                        onReject={() => saveReview(w, { status: 'rejected' })}
+                                        onDelete={() => handleDelete(w)}
+                                    />
+                                ))
+                            )}
+                        </div>
+                    ) : (
+                        /* 公開作品展示牆 */
+                        shownWorks.length === 0 ? (
+                            <div className="bg-white p-12 rounded-2xl border border-dashed border-slate-300 text-center space-y-3">
+                                <i className="fa-solid fa-photo-film text-4xl text-slate-300"></i>
+                                <h4 className="font-bold text-slate-600 text-base">暫時還沒有已發表的作品</h4>
+                                <p className="text-xs text-slate-400 max-w-md mx-auto">
+                                    請前往「學生拍照打卡與反思手冊」填寫反思，然後點擊「發表作品到分享天地」。作品經教師審閱批改後會在此展示。
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {shownWorks.map(w => <GalleryWorkCard key={w.id} w={w} />)}
+                            </div>
+                        )
+                    )}
+
+                    {/* 教師登入彈窗 */}
+                    {showLogin && (
+                        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn" onClick={() => setShowLogin(false)}>
+                            <div className="bg-white rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-2xl border border-meiho-sand" onClick={(e) => e.stopPropagation()}>
+                                <div className="text-center">
+                                    <div className="w-12 h-12 mx-auto bg-meiho-red rounded-full flex items-center justify-center text-white">
+                                        <i className="fa-solid fa-lock"></i>
                                     </div>
-
-                                    <div>
-                                        <label className="text-[11px] text-amber-800 block mb-1">教師評語與指導建議：</label>
-                                        <textarea 
-                                            rows="3"
-                                            placeholder="請輸入給學生的批改評語..."
-                                            value={teacherFeedback.comment}
-                                            onChange={(e) => setTeacherFeedback({...teacherFeedback, comment: e.target.value})}
-                                            className="w-full p-2 border border-amber-300 rounded-lg text-xs focus:outline-none bg-white"
-                                        ></textarea>
-                                    </div>
-
-                                    <div className="flex items-center justify-between pt-1">
-                                        <label className="flex items-center text-xs text-amber-900 cursor-pointer">
-                                            <input 
-                                                type="checkbox" 
-                                                checked={teacherFeedback.featured}
-                                                onChange={(e) => setTeacherFeedback({...teacherFeedback, featured: e.target.checked})}
-                                                className="mr-1.5 rounded text-meiho-red focus:ring-meiho-orange"
-                                            />
-                                            設為優質精選反思作品
-                                        </label>
-                                    </div>
+                                    <h3 className="font-bold text-lg text-meiho-slate mt-2">教師批閱通道</h3>
+                                    <p className="text-xs text-slate-500">請輸入統一管理密碼進入批閱後台</p>
+                                </div>
+                                <input
+                                    type="password"
+                                    value={pw}
+                                    autoFocus
+                                    onChange={(e) => setPw(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') handleLogin(); }}
+                                    placeholder="管理密碼"
+                                    className="w-full p-3 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-meiho-orange text-center tracking-widest"
+                                />
+                                {pwError && (
+                                    <p className="text-xs text-red-600 text-center"><i className="fa-solid fa-circle-exclamation mr-1"></i>{pwError}</p>
+                                )}
+                                {dbMode === 'demo' && (
+                                    <p className="text-[11px] text-slate-400 text-center">演示模式預設密碼：{DEMO_TEACHER_PASSWORD}</p>
+                                )}
+                                <div className="flex space-x-2">
+                                    <button onClick={() => setShowLogin(false)} className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">取消</button>
+                                    <button onClick={handleLogin} disabled={pwBusy} className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-meiho-red text-white hover:bg-meiho-darkred transition disabled:opacity-60">
+                                        {pwBusy ? '驗證中…' : '登入'}
+                                    </button>
                                 </div>
                             </div>
                         </div>
-
-                        {/* 右側：打卡相片集與反思卡片 (8 Cols) */}
-                        <div className="lg:col-span-8 space-y-4">
-                            <h3 className="font-bold text-lg text-meiho-slate flex items-center justify-between">
-                                <span><i className="fa-solid fa-photo-film text-meiho-red mr-2"></i>研學拍攝相片與反思展示冊</span>
-                                {teacherFeedback.grade !== '未評分' && (
-                                    <span className="text-xs bg-meiho-red text-white font-bold px-3 py-1 rounded-full">
-                                        教師評分：{teacherFeedback.grade}
-                                    </span>
-                                )}
-                            </h3>
-
-                            {/* 教師評語展示區（若已填寫） */}
-                            {teacherFeedback.comment && (
-                                <div className="bg-amber-100/80 border-l-4 border-amber-500 p-4 rounded-r-xl">
-                                    <h4 className="font-bold text-xs text-amber-900 mb-1 flex items-center">
-                                        <i className="fa-solid fa-comment-dots text-meiho-orange mr-2"></i> 教師評語回饋：
-                                    </h4>
-                                    <p className="text-xs text-amber-800 italic leading-relaxed">{teacherFeedback.comment}</p>
-                                </div>
-                            )}
-
-                            {!isStudentSubmitted ? (
-                                <div className="bg-white p-12 rounded-2xl border border-dashed border-slate-300 text-center space-y-3">
-                                    <i className="fa-solid fa-camera-retro text-4xl text-slate-300"></i>
-                                    <h4 className="font-bold text-slate-600 text-base">尚未完成任何景點打卡</h4>
-                                    <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                                        請前往「拍照打卡與反思手冊」分頁，填寫你的學生名字，並上傳景點照片與寫下考察心得。
-                                    </p>
-                                </div>
-                            ) : (
-                                <div className="space-y-4">
-                                    {spots.map(spot => {
-                                        const log = studentLogs[spot.id];
-                                        if (!log?.completed) return null;
-
-                                        return (
-                                            <div key={spot.id} className="bg-white p-4 rounded-2xl shadow-sm border border-meiho-sand space-y-3">
-                                                <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-                                                    <div>
-                                                        <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded mr-2">
-                                                            {spot.category}
-                                                        </span>
-                                                        <span className="font-bold text-sm text-meiho-slate">{spot.title}</span>
-                                                    </div>
-                                                    <span className="text-[10px] text-slate-400">
-                                                        {log.timestamp}
-                                                    </span>
-                                                </div>
-
-                                                <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-start">
-                                                    {/* 照片 */}
-                                                    <div className="sm:col-span-5 h-40 rounded-xl overflow-hidden bg-slate-100 border border-slate-200">
-                                                        <img 
-                                                            src={log.photo || spot.image} 
-                                                            alt={spot.title}
-                                                            onError={(e) => { e.target.src = spot.fallbackImg; }}
-                                                            className="w-full h-full object-cover" 
-                                                        />
-                                                    </div>
-
-                                                    {/* 心得內文 */}
-                                                    <div className="sm:col-span-7 bg-meiho-cream p-3 rounded-xl border border-meiho-sand text-xs leading-relaxed text-slate-700 h-full flex flex-col justify-between">
-                                                        <div>
-                                                            <p className="font-bold text-meiho-darkred mb-1">
-                                                                <i className="fa-solid fa-quote-left mr-1 opacity-50"></i>
-                                                                學生觀察反思：
-                                                            </p>
-                                                            <p className="whitespace-pre-line text-slate-800 font-normal">{log.reflection}</p>
-                                                        </div>
-                                                        <div className="mt-3 pt-2 border-t border-meiho-sand/60 text-[10px] text-slate-400 flex justify-between">
-                                                            <span>對應展區：{spot.floor}</span>
-                                                            <span className="text-green-600 font-semibold">✓ 已打卡驗證</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </div>
-                    </div>
+                    )}
                 </div>
             );
         }
